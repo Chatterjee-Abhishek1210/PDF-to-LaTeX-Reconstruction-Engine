@@ -1,3 +1,5 @@
+import { PdfIcon, SparklesIcon } from './Icons'
+
 /**
  * SideBySideView — Side-by-side comparison of original and generated PDFs
  * Displays PDF previews with visual fidelity score
@@ -89,7 +91,7 @@ export default function SideBySideView({ jobId, ssimScore }) {
       <div className="comparison-container">
         <div className="comparison-panel">
           <div className="panel-header">
-            <span>📄</span>
+            <span style={{ display: 'inline-flex' }}><PdfIcon size={16} /></span>
             Original PDF
           </div>
           <div className="panel-body">
@@ -115,7 +117,7 @@ export default function SideBySideView({ jobId, ssimScore }) {
               gap: '1rem',
               color: 'var(--text-muted)',
             }}>
-              <span style={{ fontSize: '3rem' }}>📄</span>
+              <span style={{ display: 'inline-flex' }}><PdfIcon size={48} /></span>
               <p>Original PDF preview will appear here</p>
             </div>
           </div>
@@ -123,7 +125,7 @@ export default function SideBySideView({ jobId, ssimScore }) {
 
         <div className="comparison-panel">
           <div className="panel-header">
-            <span>✨</span>
+            <span style={{ display: 'inline-flex' }}><SparklesIcon size={16} /></span>
             Generated PDF
           </div>
           <div className="panel-body">
@@ -149,7 +151,7 @@ export default function SideBySideView({ jobId, ssimScore }) {
               gap: '1rem',
               color: 'var(--text-muted)',
             }}>
-              <span style={{ fontSize: '3rem' }}>✨</span>
+              <span style={{ display: 'inline-flex' }}><SparklesIcon size={48} /></span>
               <p>Generated PDF will appear after conversion</p>
             </div>
           </div>

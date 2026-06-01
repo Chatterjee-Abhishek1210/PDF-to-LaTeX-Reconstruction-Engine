@@ -1,4 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
+import {
+  LaTeXIcon,
+  CheckIcon,
+  ClipboardIcon,
+  DownloadIcon
+} from './Icons'
 
 /**
  * LaTeXEditor — Syntax-highlighted LaTeX code editor
@@ -55,7 +61,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId }) {
           alignItems: 'center',
           gap: '0.75rem',
         }}>
-          <span style={{ fontSize: '1rem' }}>📝</span>
+          <span style={{ display: 'inline-flex' }}><LaTeXIcon size={16} /></span>
           <span style={{
             fontWeight: 600,
             fontSize: '0.85rem',
@@ -80,18 +86,20 @@ export default function LaTeXEditor({ code, onCodeChange, jobId }) {
           <button
             className="btn-secondary"
             onClick={handleCopy}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
             id="copy-latex-btn"
           >
-            {copied ? '✓ Copied' : '📋 Copy'}
+            {copied ? <CheckIcon size={14} /> : <ClipboardIcon size={14} />}
+            {copied ? 'Copied' : 'Copy'}
           </button>
           <button
             className="btn-secondary"
             onClick={handleDownload}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
             id="download-tex-btn"
           >
-            💾 Download .tex
+            <DownloadIcon size={14} />
+            Download .tex
           </button>
         </div>
       </div>

@@ -1,3 +1,9 @@
+import {
+  LaTeXIcon,
+  PdfIcon,
+  ExportIcon
+} from './Icons'
+
 /**
  * ExportPanel — Download options for LaTeX, PDF, and ZIP package
  */
@@ -7,7 +13,7 @@ export default function ExportPanel({ jobId }) {
   const exports = [
     {
       id: 'tex',
-      icon: '📄',
+      icon: <LaTeXIcon size={40} />,
       label: 'LaTeX Source',
       desc: '.tex file with all formatting',
       url: `${baseUrl}/tex/${jobId}`,
@@ -15,7 +21,7 @@ export default function ExportPanel({ jobId }) {
     },
     {
       id: 'pdf',
-      icon: '📕',
+      icon: <PdfIcon size={40} />,
       label: 'Compiled PDF',
       desc: 'Generated PDF output',
       url: `${baseUrl}/pdf/${jobId}`,
@@ -23,7 +29,7 @@ export default function ExportPanel({ jobId }) {
     },
     {
       id: 'docx',
-      icon: '📝',
+      icon: <LaTeXIcon size={40} />,
       label: 'Word Document',
       desc: 'Generated Word (.docx)',
       url: `${baseUrl}/docx/${jobId}`,
@@ -31,7 +37,7 @@ export default function ExportPanel({ jobId }) {
     },
     {
       id: 'zip',
-      icon: '📦',
+      icon: <ExportIcon size={40} />,
       label: 'Full Package',
       desc: 'ZIP with .tex, images & PDF',
       url: `${baseUrl}/zip/${jobId}`,
@@ -39,7 +45,7 @@ export default function ExportPanel({ jobId }) {
     },
     {
       id: 'original',
-      icon: '📋',
+      icon: <PdfIcon size={40} />,
       label: 'Original PDF',
       desc: 'Download source document',
       url: `${baseUrl}/original/${jobId}`,
@@ -59,7 +65,10 @@ export default function ExportPanel({ jobId }) {
   return (
     <div className="animate-fade-in">
       <div className="section-header">
-        <h2>📦 Export</h2>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ExportIcon size={24} />
+          Export
+        </h2>
         <p>Download your converted files</p>
       </div>
 
@@ -73,7 +82,7 @@ export default function ExportPanel({ jobId }) {
             tabIndex={0}
             id={`export-${item.id}-btn`}
           >
-            <div className="export-icon">{item.icon}</div>
+            <div className="export-icon" style={{ display: 'inline-flex', justifyContent: 'center' }}>{item.icon}</div>
             <div className="export-label">{item.label}</div>
             <div className="export-desc">{item.desc}</div>
             <div style={{

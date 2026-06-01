@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { PdfIcon, CompareIcon } from './Icons'
 
 /**
  * UploadZone — Drag-and-drop PDF upload component
@@ -76,7 +77,9 @@ export default function UploadZone({ onFileSelect, disabled }) {
       <div style={{ position: 'relative', zIndex: 1 }}>
         {selectedFile ? (
           <div className="animate-fade-in">
-            <div className="upload-icon">📄</div>
+            <div className="upload-icon" style={{ display: 'flex', justifyContent: 'center' }}>
+              <PdfIcon size={64} />
+            </div>
             <h3 style={{ 
               fontSize: '1.25rem', 
               fontWeight: 700, 
@@ -99,7 +102,9 @@ export default function UploadZone({ onFileSelect, disabled }) {
           </div>
         ) : (
           <>
-            <div className="upload-icon">🔬</div>
+            <div className="upload-icon" style={{ display: 'flex', justifyContent: 'center' }}>
+              <CompareIcon size={64} />
+            </div>
             <h3 style={{ 
               fontSize: '1.5rem', 
               fontWeight: 700, 

@@ -1,29 +1,114 @@
+import { useState, useEffect } from 'react'
+import {
+  UploadIcon,
+  SearchIcon,
+  BrainIcon,
+  SettingsIcon,
+  LaTeXIcon,
+  CompareIcon,
+  CheckIcon,
+  LightningIcon,
+  FailedIcon,
+  SparklesIcon
+} from './Icons'
+
 /**
  * ConversionProgress — Real-time conversion progress display
- * Shows step-by-step pipeline status with animated progress bar
+ * Shows step-by-step pipeline status with animated progress bar.
+ * Enforces a minimum 1 second duration per step for a smoother and
+ * more readable user experience.
  */
-export default function ConversionProgress({ status, progress, message }) {
+export default function ConversionProgress({ status, progress, message, onVisualComplete }) {
   const steps = [
-    { id: 'upload', label: 'Upload', icon: '📤', desc: 'PDF received' },
-    { id: 'parsing', label: 'Parsing', icon: '🔍', desc: 'Analyzing document structure' },
-    { id: 'analyzing', label: 'Analyzing', icon: '🧠', desc: 'AI processing layout & content' },
-    { id: 'generating', label: 'Generating', icon: '⚙️', desc: 'Creating LaTeX code' },
-    { id: 'compiling', label: 'Compiling', icon: '📝', desc: 'Building output PDF' },
-    { id: 'comparing', label: 'Comparing', icon: '🔬', desc: 'Measuring visual fidelity' },
-    { id: 'complete', label: 'Complete', icon: '✅', desc: 'Ready to download' },
+    { id: 'upload', label: 'Upload', icon: <UploadIcon size={18} />, desc: 'PDF received' },
+    { id: 'parsing', label: 'Parsing', icon: <SearchIcon size={18} />, desc: 'Analyzing document structure' },
+    { id: 'analyzing', label: 'Analyzing', icon: <BrainIcon size={18} />, desc: 'AI processing layout & content' },
+    { id: 'generating', label: 'Generating', icon: <SettingsIcon size={18} />, desc: 'Creating LaTeX code' },
+    { id: 'compiling', label: 'Compiling', icon: <LaTeXIcon size={18} />, desc: 'Building output PDF' },
+    { id: 'comparing', label: 'Comparing', icon: <CompareIcon size={18} />, desc: 'Measuring visual fidelity' },
+    { id: 'complete', label: 'Complete', icon: <CheckIcon size={18} />, desc: 'Ready to download' },
   ]
 
+  const statusOrder = ['upload', 'parsing', 'analyzing', 'generating', 'compiling', 'comparing', 'complete']
+  const stepProgressValues = [15, 30, 50, 70, 85, 95, 100]
+
+  const getParentStatusIndex = (s) => {
+    if (s === 'uploading' || s === 'uploaded') return 0
+    if (s === 'processing') return 1
+    if (s === 'failed') return -2
+    const idx = statusOrder.indexOf(s)
+    return idx !== -1 ? idx : 0
+  }
+
+  const [visualIdx, setVisualIdx] = useState(0)
+  const [visualProgress, setVisualProgress] = useState(0)
+
+  // Reset visual state when starting/uploading a new file
+  useEffect(() => {
+    if (status === 'idle' || status === 'uploading') {
+      setVisualIdx(0)
+      setVisualProgress(0)
+    }
+  }, [status])
+
+  const targetIdx = getParentStatusIndex(status)
+
+  // Step advancement timer: spend at least 1000ms at each step
+  useEffect(() => {
+    if (status === 'failed') return
+
+    if (visualIdx < targetIdx) {
+      const timer = setTimeout(() => {
+        setVisualIdx(prev => prev + 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    } else if (visualIdx === 6 && status === 'complete') {
+      if (onVisualComplete) {
+        onVisualComplete()
+      }
+    }
+  }, [visualIdx, targetIdx, status, onVisualComplete])
+
+  // Smooth easing animation for progress bar and percentage
+  const targetProgress = status === 'failed' ? progress : stepProgressValues[visualIdx]
+  useEffect(() => {
+    let animationFrameId
+
+    const animate = () => {
+      setVisualProgress(prev => {
+        if (prev < targetProgress) {
+          const stepSize = Math.max((targetProgress - prev) * 0.1, 0.2)
+          const next = prev + stepSize
+          if (next >= targetProgress) return targetProgress
+          return next
+        } else if (prev > targetProgress) {
+          return targetProgress
+        }
+        return prev
+      })
+      animationFrameId = requestAnimationFrame(animate)
+    }
+
+    animate()
+    return () => cancelAnimationFrame(animationFrameId)
+  }, [targetProgress])
+
   const getStepState = (stepId) => {
-    const statusOrder = ['upload', 'parsing', 'analyzing', 'generating', 'compiling', 'comparing', 'complete']
-    const currentIdx = statusOrder.indexOf(status)
     const stepIdx = statusOrder.indexOf(stepId)
 
-    if (status === 'complete') return 'complete'
-    if (status === 'failed') return stepIdx <= currentIdx ? 'failed' : 'pending'
-    if (stepIdx < currentIdx) return 'complete'
-    if (stepIdx === currentIdx) return 'active'
+    if (stepIdx < visualIdx) return 'complete'
+    if (stepIdx === visualIdx) {
+      return status === 'failed' ? 'failed' : 'active'
+    }
     return 'pending'
   }
+
+  const currentStep = steps[visualIdx] || steps[0]
+  const displayMessage = status === 'complete' && visualIdx === 6
+    ? 'Conversion complete!'
+    : status === 'failed'
+    ? message || 'Conversion failed'
+    : currentStep.desc
 
   return (
     <div className="glass-card animate-slide-up" style={{ padding: '2rem' }}>
@@ -36,11 +121,11 @@ export default function ConversionProgress({ status, progress, message }) {
           alignItems: 'center',
           gap: '0.5rem',
         }}>
-          {status === 'complete' ? '✨' : status === 'failed' ? '❌' : '⚡'} 
+          {status === 'failed' ? <FailedIcon size={18} /> : (visualIdx === 6 ? <SparklesIcon size={18} /> : <LightningIcon size={18} />)} 
           Conversion Progress
         </h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
-          {message}
+          {displayMessage}
         </p>
       </div>
 
@@ -49,7 +134,7 @@ export default function ConversionProgress({ status, progress, message }) {
         <div 
           className="progress-bar" 
           style={{ 
-            width: `${progress}%`,
+            width: `${visualProgress}%`,
             background: status === 'failed' 
               ? 'linear-gradient(135deg, #e17055, #d63031)' 
               : 'var(--gradient-primary)',
@@ -68,7 +153,7 @@ export default function ConversionProgress({ status, progress, message }) {
         backgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
       }}>
-        {Math.round(progress)}%
+        {Math.round(visualProgress)}%
       </div>
 
       {/* Steps */}
@@ -77,8 +162,8 @@ export default function ConversionProgress({ status, progress, message }) {
           const stepState = getStepState(step.id)
           return (
             <div key={step.id} className={`status-step ${stepState}`}>
-              <div className="step-icon">
-                {stepState === 'complete' ? '✓' : step.icon}
+              <div className="step-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                {stepState === 'complete' ? <CheckIcon size={18} /> : step.icon}
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ 

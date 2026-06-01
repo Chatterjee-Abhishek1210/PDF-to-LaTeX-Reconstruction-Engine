@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './index.css'
 import { useConversion } from './hooks/useConversion'
 import UploadZone from './components/UploadZone'
@@ -7,6 +7,21 @@ import SideBySideView from './components/SideBySideView'
 import LaTeXEditor from './components/LaTeXEditor'
 import ThemeToggle from './components/ThemeToggle'
 import ExportPanel from './components/ExportPanel'
+import {
+  UploadIcon,
+  LightningIcon,
+  LaTeXIcon,
+  CompareIcon,
+  ExportIcon,
+  ColorIcon,
+  TypographyIcon,
+  LayoutIcon,
+  TableIcon,
+  EquationIcon,
+  ImageIcon,
+  FailedIcon,
+  RefreshIcon
+} from './components/Icons'
 
 /**
  * Main Application — PDF-to-LaTeX Reconstruction Engine
@@ -21,17 +36,25 @@ export default function App() {
     setActiveTab('progress')
   }
 
-  // Auto-switch to results when complete
-  if (conversion.status === 'complete' && activeTab === 'progress') {
+  const [visualFinished, setVisualFinished] = useState(false)
+
+  useEffect(() => {
+    if (conversion.status !== 'complete') {
+      setVisualFinished(false)
+    }
+  }, [conversion.status])
+
+  // Auto-switch to results when complete and visual animation is finished
+  if (conversion.status === 'complete' && visualFinished && activeTab === 'progress') {
     setActiveTab('editor')
   }
 
   const tabs = [
-    { id: 'upload', label: 'Upload', icon: '📤' },
-    { id: 'progress', label: 'Progress', icon: '⚡', show: conversion.status !== 'idle' },
-    { id: 'editor', label: 'LaTeX Code', icon: '📝', show: conversion.latexCode },
-    { id: 'compare', label: 'Compare', icon: '🔬', show: conversion.status === 'complete' },
-    { id: 'export', label: 'Export', icon: '📦', show: conversion.status === 'complete' },
+    { id: 'upload', label: 'Upload', icon: <UploadIcon /> },
+    { id: 'progress', label: 'Progress', icon: <LightningIcon />, show: conversion.status !== 'idle' },
+    { id: 'editor', label: 'LaTeX Code', icon: <LaTeXIcon />, show: conversion.latexCode },
+    { id: 'compare', label: 'Compare', icon: <CompareIcon />, show: conversion.status === 'complete' },
+    { id: 'export', label: 'Export', icon: <ExportIcon />, show: conversion.status === 'complete' },
   ]
 
   return (
@@ -42,8 +65,10 @@ export default function App() {
 
       {/* Navbar */}
       <nav className="navbar">
-        <div className="logo">
-          <span className="logo-icon">⚡</span>
+        <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span className="logo-icon" style={{ display: 'inline-flex' }}>
+            <LightningIcon size={18} />
+          </span>
           PDF → LaTeX
         </div>
 
@@ -56,8 +81,9 @@ export default function App() {
                 className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab.id)}
                 id={`tab-${tab.id}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
               >
-                <span>{tab.icon}</span>
+                <span style={{ display: 'inline-flex' }}>{tab.icon}</span>
                 {tab.label}
               </button>
             ))}
@@ -119,12 +145,12 @@ export default function App() {
                 marginBottom: '2rem',
               }}>
                 {[
-                  { icon: '🎨', label: 'Exact Colors' },
-                  { icon: '🔤', label: 'Typography' },
-                  { icon: '📐', label: 'Layout Fidelity' },
-                  { icon: '📊', label: 'Tables' },
-                  { icon: '∑', label: 'Equations' },
-                  { icon: '🖼️', label: 'Images' },
+                  { icon: <ColorIcon size={14} />, label: 'Exact Colors' },
+                  { icon: <TypographyIcon size={14} />, label: 'Typography' },
+                  { icon: <LayoutIcon size={14} />, label: 'Layout Fidelity' },
+                  { icon: <TableIcon size={14} />, label: 'Tables' },
+                  { icon: <EquationIcon size={14} />, label: 'Equations' },
+                  { icon: <ImageIcon size={14} />, label: 'Images' },
                 ].map(feat => (
                   <span key={feat.label} style={{
                     display: 'inline-flex',
@@ -138,7 +164,7 @@ export default function App() {
                     fontWeight: 500,
                     color: 'var(--text-primary)',
                   }}>
-                    {feat.icon} {feat.label}
+                    <span style={{ display: 'inline-flex' }}>{feat.icon}</span> {feat.label}
                   </span>
                 ))}
               </div>
@@ -160,8 +186,12 @@ export default function App() {
                 borderRadius: 'var(--radius-md)',
                 color: 'var(--danger)',
                 fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
               }}>
-                ❌ {conversion.error}
+                <FailedIcon size={16} />
+                {conversion.error}
               </div>
             )}
 
@@ -189,9 +219,10 @@ export default function App() {
               status={conversion.status}
               progress={conversion.progress}
               message={conversion.message}
+              onVisualComplete={() => setVisualFinished(true)}
             />
 
-            {conversion.status === 'complete' && (
+            {conversion.status === 'complete' && visualFinished && (
               <div style={{ 
                 textAlign: 'center', 
                 marginTop: '1.5rem',
@@ -203,15 +234,19 @@ export default function App() {
                   className="btn-primary" 
                   onClick={() => setActiveTab('editor')}
                   id="view-latex-btn"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                 >
-                  📝 View LaTeX Code
+                  <LaTeXIcon size={16} />
+                  View LaTeX Code
                 </button>
                 <button 
                   className="btn-secondary" 
                   onClick={() => setActiveTab('compare')}
                   id="view-compare-btn"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                 >
-                  🔬 Compare PDFs
+                  <CompareIcon size={16} />
+                  Compare PDFs
                 </button>
               </div>
             )}
@@ -222,8 +257,10 @@ export default function App() {
                   className="btn-primary" 
                   onClick={() => { conversion.reset(); setActiveTab('upload') }}
                   id="try-again-btn"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                 >
-                  🔄 Try Again
+                  <RefreshIcon size={16} />
+                  Try Again
                 </button>
               </div>
             )}
@@ -234,7 +271,10 @@ export default function App() {
         {activeTab === 'editor' && (
           <div>
             <div className="section-header">
-              <h2>📝 Generated LaTeX Code</h2>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LaTeXIcon size={24} />
+                Generated LaTeX Code
+              </h2>
               <p>
                 Clean, modular, compilable LaTeX source — 
                 {conversion.latexCode ? ` ${conversion.latexCode.split('\n').length} lines generated` : ''}
@@ -252,7 +292,10 @@ export default function App() {
         {activeTab === 'compare' && (
           <div>
             <div className="section-header">
-              <h2>🔬 Visual Comparison</h2>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CompareIcon size={24} />
+                Visual Comparison
+              </h2>
               <p>Side-by-side comparison of original and generated PDFs</p>
             </div>
             <SideBySideView
