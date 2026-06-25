@@ -30,6 +30,7 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState('upload')
   const conversion = useConversion()
+  const [editedCode, setEditedCode] = useState('')
 
   const handleFileSelect = async (file) => {
     await conversion.uploadAndConvert(file)
@@ -44,18 +45,39 @@ export default function App() {
     }
   }, [conversion.status])
 
+  useEffect(() => {
+    if (conversion.latexCode) {
+      setEditedCode(conversion.latexCode)
+    }
+  }, [conversion.latexCode])
+
   // Auto-switch to results when complete and visual animation is finished
   if (conversion.status === 'complete' && visualFinished && activeTab === 'progress') {
     setActiveTab('editor')
   }
 
+  if (activeTab === 'editor' && conversion.latexCode) {
+    return (
+      <LaTeXEditor
+        code={editedCode}
+        onCodeChange={setEditedCode}
+        jobId={conversion.jobId}
+        onReset={() => {
+          conversion.reset()
+          setActiveTab('upload')
+        }}
+      />
+    )
+  }
+
   const tabs = [
     { id: 'upload', label: 'Upload', icon: <UploadIcon /> },
     { id: 'progress', label: 'Progress', icon: <LightningIcon />, show: conversion.status !== 'idle' },
-    { id: 'editor', label: 'LaTeX Code', icon: <LaTeXIcon />, show: conversion.latexCode },
+    { id: 'editor', label: 'Live Editor', icon: <LaTeXIcon />, show: conversion.latexCode },
     { id: 'compare', label: 'Compare', icon: <CompareIcon />, show: conversion.status === 'complete' },
     { id: 'export', label: 'Export', icon: <ExportIcon />, show: conversion.status === 'complete' },
   ]
+
 
   return (
     <>
@@ -267,26 +289,7 @@ export default function App() {
           </div>
         )}
 
-        {/* LaTeX Editor Tab */}
-        {activeTab === 'editor' && (
-          <div>
-            <div className="section-header">
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <LaTeXIcon size={24} />
-                Generated LaTeX Code
-              </h2>
-              <p>
-                Clean, modular, compilable LaTeX source — 
-                {conversion.latexCode ? ` ${conversion.latexCode.split('\n').length} lines generated` : ''}
-              </p>
-            </div>
-            <LaTeXEditor
-              code={conversion.latexCode}
-              onCodeChange={(code) => {}}
-              jobId={conversion.jobId}
-            />
-          </div>
-        )}
+        {/* LaTeX Editor Tab is handled by early return for full viewport experience */}
 
         {/* Compare Tab */}
         {activeTab === 'compare' && (

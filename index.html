@@ -1,0 +1,4041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LaTeX Studio | Bidirectional Live Editor & Sync Engine</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* Design Tokens */
+    :root {
+      /* Dark Theme (Default) */
+      --bg-app:          #0a0a1a;
+      --bg-toolbar:      #12122a;
+      --bg-editor:       #12122a;
+      --bg-gutter:       #0a0a1a;
+      --bg-active-line:  #1a1a3e;
+      --bg-pdf-area:     #0a0a1a;
+      --pdf-page-bg:     #ffffff;
+      --pdf-shadow:      0 8px 40px rgba(0, 0, 0, 0.5);
+      --accent:          #6c5ce7;
+      --accent-hover:    #a29bfe;
+      --text-primary:    #f0f0ff;
+      --text-muted:      #6a6a8e;
+      --text-editor:     #f0f0ff;
+      --border:          rgba(108, 92, 231, 0.2);
+      --error:           #e17055;
+      --warning:         #fdcb6e;
+      --success:         #00b894;
+      
+      --sync-flash-pdf:  rgba(255, 210, 40, 0.28);
+      --sync-flash-code: rgba(108, 92, 231, 0.20);
+      --hover-pdf:       rgba(108, 92, 231, 0.10);
+      
+      --ui-font: 'Inter', system-ui, sans-serif;
+      --code-font: 'JetBrains Mono', 'Fira Code', monospace;
+      --pdf-font: 'Computer Modern Serif', Georgia, serif;
+    }
+
+    [data-theme="light"] {
+      --bg-app:          #f5f5ff;
+      --bg-toolbar:      #eeeef8;
+      --bg-editor:       #ffffff;
+      --bg-gutter:       #f5f5ff;
+      --bg-active-line:  #e0e0f0;
+      --bg-pdf-area:     #eeeef8;
+      --pdf-page-bg:     #ffffff;
+      --pdf-shadow:      0 4px 20px rgba(0,0,0,0.1);
+      --accent:          #6c5ce7;
+      --accent-hover:    #4834d4;
+      --text-primary:    #1a1a2e;
+      --text-muted:      #8a8aa0;
+      --border:          rgba(108, 92, 231, 0.15);
+    }
+
+    /* Reset & Core Page Layout */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--ui-font);
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    /* Toolbar Layout */
+    .toolbar {
+      height: 56px;
+      background-color: var(--bg-toolbar);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 10;
+      user-select: none;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .toolbar-left, .toolbar-middle, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-title {
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.025em;
+      color: var(--accent);
+    }
+
+    .app-title span {
+      color: var(--text-primary);
+      font-weight: 300;
+    }
+
+    /* Common Button Design */
+    .btn {
+      background-color: var(--accent);
+      color: #ffffff;
+      border: none;
+      padding: 8px 14px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.2s ease, transform 0.1s ease;
+    }
+
+    .btn:hover {
+      background-color: var(--accent-hover);
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-secondary {
+      background-color: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--bg-active-line);
+    }
+
+    .btn-icon {
+      padding: 8px;
+      border-radius: 6px;
+      background-color: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-icon:hover {
+      background-color: var(--bg-active-line);
+    }
+
+    .btn-icon.active {
+      background-color: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Switch styling */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border);
+      transition: 0.4s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-primary);
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+      background-color: #ffffff;
+    }
+
+    .zoom-select {
+      background-color: var(--bg-editor);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Workspace Split Screen Layout */
+    .main-container {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Left Outline Tree Panel */
+    .outline-panel {
+      width: 240px;
+      background-color: var(--bg-toolbar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.2s ease, transform 0.2s ease;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .outline-panel.collapsed {
+      width: 0;
+      border-right: none;
+    }
+
+    .outline-header {
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .outline-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 8px;
+    }
+
+    .outline-item {
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .outline-item:hover, .outline-item.active {
+      background-color: var(--bg-active-line);
+      color: var(--text-primary);
+    }
+
+    .outline-item.active {
+      border-left: 3px solid var(--accent);
+      font-weight: 500;
+    }
+
+    .outline-item.sec-1 { padding-left: 12px; }
+    .outline-item.sec-2 { padding-left: 24px; font-size: 0.8rem; }
+    .outline-item.sec-3 { padding-left: 36px; font-size: 0.75rem; }
+
+    /* Code Editor Container Pane */
+    .editor-pane {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      height: 100%;
+      min-width: 200px;
+      background-color: var(--bg-editor);
+    }
+
+    /* Search and Replace Panel style */
+    .search-replace-panel {
+      background-color: var(--bg-toolbar);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 6;
+      transition: all 0.2s ease;
+      overflow: hidden;
+    }
+
+    .search-replace-panel.collapsed {
+      height: 0;
+      padding: 0 16px;
+      border-bottom: none;
+    }
+
+    .search-row, .replace-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .search-input {
+      background-color: var(--bg-editor);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      outline: none;
+      flex: 1;
+    }
+
+    .search-count {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      min-width: 48px;
+    }
+
+    .search-option-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .editor-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Draggable Pane Divider */
+    .pane-divider {
+      width: 8px;
+      background-color: var(--bg-app);
+      cursor: col-resize;
+      z-index: 5;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background-color 0.2s ease;
+    }
+
+    .pane-divider::after {
+      content: "";
+      width: 2px;
+      height: 32px;
+      background-color: var(--border);
+      border-radius: 1px;
+    }
+
+    .pane-divider:hover, .pane-divider.resizing {
+      background-color: var(--accent);
+    }
+
+    /* Page Minimap Sidebar */
+    .pdf-minimap {
+      width: 48px;
+      background-color: var(--bg-toolbar);
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0;
+      overflow-y: auto;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .minimap-page {
+      width: 32px;
+      height: 44px;
+      background-color: var(--pdf-page-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      transition: border-color 0.2s ease, transform 0.15s ease;
+    }
+
+    .minimap-page:hover {
+      transform: scale(1.05);
+      border-color: var(--text-muted);
+    }
+
+    .minimap-page.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+
+    .minimap-page-number {
+      font-size: 0.65rem;
+      color: #333333;
+      font-weight: 600;
+    }
+
+    /* Right Preview Pane */
+    .preview-pane {
+      flex: 1;
+      height: 100%;
+      background-color: var(--bg-pdf-area);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      position: relative;
+      transition: background-color 0.2s ease;
+      scroll-behavior: smooth;
+    }
+
+    .pdf-zoom-wrapper {
+      transform-origin: top center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      transition: transform 0.1s ease;
+    }
+
+    /* simulated high fidelity A4 PDF pages */
+    .pdf-page {
+      width: 210mm;
+      height: 297mm;
+      min-height: 297mm;
+      padding: 2.5cm;
+      background-color: var(--pdf-page-bg);
+      box-shadow: var(--pdf-shadow);
+      margin-bottom: 24px;
+      position: relative;
+      box-sizing: border-box;
+      color: #000000;
+      font-family: var(--pdf-font);
+      font-size: 11pt;
+      line-height: 1.5;
+      text-align: justify;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .page-content {
+      flex: 1;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .page-footer {
+      height: 24px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 10pt;
+      color: #555555;
+      user-select: none;
+    }
+
+    .page-footnotes {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 0.5px solid #000000;
+      font-size: 9pt;
+      color: #333333;
+      text-align: left;
+    }
+
+    .footnote-item {
+      margin-bottom: 4px;
+    }
+
+    /* Typographical details inside simulated pages */
+    .latex-title-block {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .latex-title {
+      font-size: 17pt;
+      font-weight: bold;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+
+    .latex-author {
+      font-size: 11pt;
+      margin-bottom: 6px;
+    }
+
+    .latex-date {
+      font-size: 11pt;
+      margin-bottom: 18px;
+    }
+
+    .latex-abstract {
+      margin: 18px 24px;
+      font-size: 9.5pt;
+    }
+
+    .latex-abstract-heading {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      font-size: 9pt;
+      letter-spacing: 0.05em;
+    }
+
+    .latex-abstract-content {
+      text-align: justify;
+    }
+
+    .latex-section {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-top: 18px;
+      margin-bottom: 8px;
+      text-align: left;
+    }
+
+    .latex-subsection {
+      font-size: 11pt;
+      font-weight: bold;
+      margin-top: 14px;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+
+    .latex-subsubsection {
+      font-size: 10pt;
+      font-weight: bold;
+      font-style: italic;
+      margin-top: 12px;
+      margin-bottom: 4px;
+      text-align: left;
+    }
+
+    .latex-paragraph {
+      margin-bottom: 10px;
+      text-indent: 1.5em;
+    }
+
+    .latex-section + .latex-paragraph,
+    .latex-subsection + .latex-paragraph,
+    .latex-subsubsection + .latex-paragraph,
+    .latex-title-block + .latex-paragraph,
+    .latex-abstract + .latex-paragraph {
+      text-indent: 0;
+    }
+
+    .underline {
+      text-decoration: underline;
+    }
+
+    .tex-monospace {
+      font-family: var(--code-font);
+      background-color: #f1f5f9;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 9pt;
+    }
+
+    /* Table of Contents style */
+    .latex-toc {
+      margin: 20px 0;
+      text-align: left;
+    }
+    .latex-toc-heading {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+    .latex-toc-item {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 6px;
+      font-size: 10pt;
+      cursor: pointer;
+    }
+    .latex-toc-item.depth-1 {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .latex-toc-item.depth-2 {
+      padding-left: 20px;
+    }
+    .latex-toc-item.depth-3 {
+      padding-left: 40px;
+      font-style: italic;
+    }
+    .toc-title {
+      margin-left: 6px;
+    }
+    .toc-filler {
+      flex: 1;
+      border-bottom: 1px dotted #000000;
+      margin: 0 8px;
+    }
+    .toc-page {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Aligned & Display Math styling */
+    .latex-equation-block {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 14px 0;
+      padding: 0 10px;
+      width: 100%;
+    }
+
+    .latex-equation-math {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+
+    .latex-equation-number {
+      font-size: 11pt;
+      margin-left: 10px;
+    }
+
+    /* Lists styling */
+    .latex-itemize, .latex-enumerate {
+      margin: 10px 0 10px 24px;
+      text-align: left;
+    }
+
+    .latex-list-item {
+      margin-bottom: 4px;
+    }
+
+    .latex-description {
+      margin: 10px 0 10px 12px;
+      text-align: left;
+    }
+
+    .latex-desc-term {
+      font-weight: bold;
+      margin-top: 6px;
+    }
+
+    .latex-desc-details {
+      margin-left: 16px;
+      margin-bottom: 6px;
+    }
+
+    /* Table styling */
+    .latex-table-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 16px 0;
+      width: 100%;
+    }
+
+    .latex-table-caption, .latex-figure-caption {
+      font-size: 10pt;
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    .latex-table {
+      border-collapse: collapse;
+      margin: 0 auto;
+      font-size: 10pt;
+    }
+
+    .latex-table td {
+      padding: 6px 12px;
+    }
+
+    .latex-table tr.border-top td {
+      border-top: 1px solid #000000;
+    }
+
+    .latex-table tr:last-child td {
+      border-bottom: 1px solid #000000;
+    }
+
+    /* Figures style */
+    .latex-figure {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 16px 0;
+      width: 100%;
+    }
+
+    .latex-figure-placeholder {
+      width: 50%;
+      height: 120px;
+      background-color: #f1f5f9;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      gap: 8px;
+    }
+
+    .figure-icon {
+      stroke: #94a3b8;
+    }
+
+    .figure-path {
+      font-size: 8.5pt;
+      font-family: var(--code-font);
+    }
+
+    /* References styling */
+    .latex-bibliography {
+      margin-top: 24px;
+      text-align: left;
+    }
+
+    .latex-bibliography-heading {
+      font-size: 12pt;
+      font-weight: bold;
+      margin-bottom: 12px;
+      border-bottom: 0.5px solid #cccccc;
+      padding-bottom: 4px;
+    }
+
+    .latex-bib-list {
+      list-style-type: none;
+    }
+
+    .latex-bib-item {
+      margin-bottom: 8px;
+      font-size: 9.5pt;
+      padding-left: 20px;
+      text-indent: -20px;
+    }
+
+    .bib-label {
+      font-weight: bold;
+      margin-right: 4px;
+    }
+
+    /* PDF Hover Overlays & Chevron Marks */
+    [data-source-line] {
+      position: relative;
+      transition: background-color 0.15s ease;
+    }
+
+    [data-source-line]:hover {
+      background-color: var(--hover-pdf);
+    }
+
+    /* Tooltip */
+    .pdf-hover-tooltip {
+      position: fixed;
+      background-color: var(--bg-toolbar);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: var(--code-font);
+      z-index: 1000;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      display: none;
+    }
+
+    /* Editable inline styling */
+    .tex-text {
+      position: relative;
+    }
+
+    .tex-text:hover {
+      border-bottom: 1px dashed var(--accent);
+      cursor: text;
+    }
+
+    .inline-editing {
+      outline: none !important;
+      border: 1px dashed var(--accent) !important;
+      background-color: rgba(108, 139, 239, 0.08) !important;
+      cursor: text;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+
+    .pdf-click-active {
+      border-left: 2px solid var(--accent) !important;
+    }
+
+    /* Warnings in place of broken elements */
+    .latex-warning-box {
+      background-color: rgba(249, 226, 175, 0.15);
+      border: 1px solid #f9e2af;
+      color: #dfa000;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 9.5pt;
+      margin: 12px 0;
+      text-align: left;
+    }
+
+    /* PDF highlight scroll animation */
+    @keyframes pdf-flash {
+      0% {
+        background-color: var(--sync-flash-pdf);
+      }
+      100% {
+        background-color: transparent;
+      }
+    }
+
+    .pdf-highlight-flash {
+      animation: pdf-flash 0.8s ease-out forwards;
+      border-radius: 4px;
+    }
+
+    /* CodeMirror Override Styles & Sync Highlights */
+    .cm-editor {
+      height: 100% !important;
+      background-color: var(--bg-editor) !important;
+      color: var(--text-editor) !important;
+      font-size: 14px;
+    }
+
+    .cm-scroller {
+      font-family: var(--code-font) !important;
+      line-height: 1.6 !important;
+    }
+
+    .cm-gutters {
+      background-color: var(--bg-gutter) !important;
+      color: var(--text-muted) !important;
+      border-right: 1px solid var(--border) !important;
+    }
+
+    .cm-activeLine {
+      background-color: var(--bg-active-line) !important;
+    }
+
+    .cm-activeLineGutter {
+      background-color: var(--bg-active-line) !important;
+      color: var(--accent) !important;
+      font-weight: bold;
+    }
+
+    /* Gutter highlights (Sync & Update) */
+    .cm-sync-highlight {
+      border-left: 4px solid var(--accent) !important;
+      background-color: var(--sync-flash-code) !important;
+      transition: background-color 1.5s ease, border-left-color 1.5s ease;
+    }
+
+    .cm-green-flash {
+      background-color: rgba(166, 227, 161, 0.25) !important;
+      border-left: 4px solid var(--success) !important;
+      transition: background-color 1.5s ease, border-left-color 1.5s ease;
+    }
+
+    /* Search Highlights */
+    .cm-search-match {
+      background-color: rgba(108, 139, 239, 0.3);
+    }
+    .cm-search-match-active {
+      background-color: rgba(255, 210, 40, 0.45) !important;
+      outline: 1px solid #ffb300;
+    }
+
+    /* Custom hover chevron gutter marker */
+    .cm-hover-chevron {
+      color: var(--accent);
+      opacity: 0.6;
+      font-size: 10px;
+      padding-left: 4px;
+    }
+    .cm-hover-gutter {
+      width: 14px;
+      border-right: none !important;
+    }
+
+    /* Gutter dot warnings/errors */
+    .cm-lint-marker-error {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background-color: var(--error) !important;
+      border-radius: 50% !important;
+      border: none !important;
+      margin-left: 4px;
+    }
+    .cm-lint-marker-warning {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background-color: var(--warning) !important;
+      border-radius: 50% !important;
+      border: none !important;
+      margin-left: 4px;
+    }
+
+    /* Error Console Panel sliding up from bottom */
+    .error-console {
+      height: 200px;
+      background-color: var(--bg-toolbar);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 8;
+      transition: height 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+      overflow: hidden;
+    }
+
+    .error-console.collapsed {
+      height: 0;
+      border-top: none;
+    }
+
+    .error-console-header {
+      padding: 8px 16px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #close-console-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    #close-console-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .error-console-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .error-console-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .error-console-list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    .error-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .error-item.severity-error {
+      background-color: rgba(243, 139, 168, 0.08);
+      border: 1px solid rgba(243, 139, 168, 0.2);
+      color: var(--error);
+    }
+
+    .error-item.severity-warning {
+      background-color: rgba(249, 226, 175, 0.08);
+      border: 1px solid rgba(249, 226, 175, 0.2);
+      color: var(--warning);
+    }
+
+    .error-item:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .error-line-badge {
+      font-family: var(--code-font);
+      font-weight: bold;
+      background-color: rgba(0, 0, 0, 0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      height: 28px;
+      background-color: var(--bg-toolbar);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      user-select: none;
+      z-index: 10;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .status-left, .status-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-badge-error {
+      color: var(--error);
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-badge-error:hover {
+      text-decoration: underline;
+    }
+
+    .status-badge-success {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    /* Modal dialog overlays (Palette / Stats) */
+    .palette-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 120px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .palette-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .palette-box {
+      width: 520px;
+      background-color: var(--bg-toolbar);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateY(-20px);
+      transition: transform 0.25s ease;
+    }
+
+    .palette-overlay.active .palette-box {
+      transform: translateY(0);
+    }
+
+    .palette-search {
+      width: 100%;
+      border: none;
+      background-color: var(--bg-editor);
+      color: var(--text-primary);
+      padding: 14px 18px;
+      font-size: 0.95rem;
+      outline: none;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--ui-font);
+    }
+
+    .palette-list {
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .palette-item {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      transition: background-color 0.15s ease;
+    }
+
+    .palette-item:hover, .palette-item.selected {
+      background-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .palette-item .item-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--code-font);
+    }
+
+    .palette-item:hover .item-meta, .palette-item.selected .item-meta {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* Custom styled scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Tool Navigation Bar -->
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <button id="outline-toggle" class="btn-icon" title="Toggle document structure outline">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+      <div class="app-title">
+        LaTeX <span>Studio</span>
+      </div>
+      <button id="compile-btn" class="btn" title="Compile LaTeX document (Ctrl+Enter)">
+        <span id="compile-spin" style="display:none; width:12px; height:12px; border:2px solid #fff; border-top:2px solid transparent; border-radius:50%; animation:spin 1s linear infinite; margin-right:4px;"></span>
+        <span id="compile-btn-text">Compile</span>
+      </button>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="auto-compile-toggle" checked />
+          <span class="slider"></span>
+        </label>
+        <span id="auto-compile-label">Auto: ON</span>
+      </div>
+    </div>
+    
+    <div class="toolbar-middle">
+      <button id="zoom-out-btn" class="btn-icon" title="Zoom Out">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+      <select id="zoom-select" class="zoom-select">
+        <option value="60">60%</option>
+        <option value="75">75%</option>
+        <option value="100" selected>100%</option>
+        <option value="125">125%</option>
+        <option value="150">150%</option>
+        <option value="200">200%</option>
+      </select>
+      <button id="zoom-in-btn" class="btn-icon" title="Zoom In">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="toolbar-right">
+      <button id="format-btn" class="btn btn-secondary" title="Auto-indent & format LaTeX code">
+        Format Code
+      </button>
+      <button id="export-btn" class="btn btn-secondary" title="Export options">
+        Export HTML
+      </button>
+      <button id="export-tex-btn" class="btn btn-secondary" title="Export LaTeX source">
+        Export .tex
+      </button>
+      <button id="theme-toggle" class="btn-icon" title="Switch Theme">
+        <!-- Sun Icon -->
+        <svg id="theme-sun-icon" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <!-- Moon Icon -->
+        <svg id="theme-moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Split Layout -->
+  <main class="main-container">
+    
+    <!-- Collapsible Outline Structure Side Pane -->
+    <div id="outline-panel" class="outline-panel">
+      <div class="outline-header">Document Sections</div>
+      <div id="outline-content" class="outline-content">
+        <!-- Outline Items Inject -->
+      </div>
+    </div>
+
+    <!-- Left Editor Pane -->
+    <div id="left-editor-pane" class="editor-pane" style="width: 50%;">
+      <!-- Search & Replace panel inject -->
+      <div id="search-replace-panel" class="search-replace-panel collapsed">
+        <div class="search-row">
+          <input type="text" id="search-input" class="search-input" placeholder="Search..." />
+          <button id="search-prev" class="btn-icon" style="padding:4px 8px;" title="Previous Match">&lt;</button>
+          <button id="search-next" class="btn-icon" style="padding:4px 8px;" title="Next Match">&gt;</button>
+          <span id="search-count" class="search-count">0 of 0</span>
+          <label class="search-option-label">
+            <input type="checkbox" id="search-case" /> Case
+          </label>
+          <label class="search-option-label">
+            <input type="checkbox" id="search-regex" /> Regex
+          </label>
+          <button id="close-search-btn" class="btn-icon" style="padding:4px 8px; border:none;" title="Close Panel">&times;</button>
+        </div>
+        <div class="replace-row">
+          <input type="text" id="replace-input" class="search-input" placeholder="Replace with..." />
+          <button id="replace-btn" class="btn btn-secondary" style="padding:4px 10px;">Replace</button>
+          <button id="replace-all-btn" class="btn btn-secondary" style="padding:4px 10px;">Replace All</button>
+        </div>
+      </div>
+
+      <div id="editor-container" class="editor-container">
+        <!-- CodeMirror Editor Injection -->
+      </div>
+      
+      <!-- Collapsible Error Console sliding up -->
+      <div id="error-console" class="error-console collapsed">
+        <div class="error-console-header">
+          <span>Compiler Diagnostics</span>
+          <button id="close-console-btn">&times;</button>
+        </div>
+        <div id="error-console-list" class="error-console-list">
+          <!-- Diagnostics log errors -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Draggable resizer line -->
+    <div id="pane-divider" class="pane-divider"></div>
+
+    <!-- PDF Page Minimap sidebar -->
+    <div id="pdf-minimap" class="pdf-minimap">
+      <!-- Mini page thumbnails -->
+    </div>
+
+    <!-- Right PDF Preview Container -->
+    <div id="pdf-viewer-pane" class="preview-pane">
+      <div id="pdf-zoom-wrapper" class="pdf-zoom-wrapper">
+        <div id="pdf-pages-container">
+          <!-- Compiled A4 styled HTML pages -->
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom status bar -->
+  <footer class="status-bar">
+    <div class="status-left">
+      <div class="status-item">
+        <span id="compile-status-badge" class="status-badge-success">Ready</span>
+        <span id="compile-time-text"></span>
+      </div>
+      <div class="status-item">
+        <span id="error-count-badge" class="status-badge-error" style="display:none;">
+          <span id="error-count-txt">0 Errors</span>
+        </span>
+      </div>
+      <div class="status-item">
+        <span id="saved-indicator" style="opacity: 0; transition: opacity 0.5s ease; color: var(--success); font-weight: 500;">Saved</span>
+      </div>
+    </div>
+    <div class="status-right">
+      <div class="status-item" id="stats-trigger" style="cursor:pointer;" title="Show Document Statistics">
+        <span id="word-count-txt">0 words</span>
+      </div>
+      <div class="status-item">
+        <span id="cursor-pos-txt">Ln 1:Col 1</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Snippets Palette Overlay Modal -->
+  <div id="palette-overlay" class="palette-overlay">
+    <div class="palette-box">
+      <input type="text" id="palette-search" class="palette-search" placeholder="Search LaTeX snippets..." autocomplete="off" />
+      <div id="palette-list" class="palette-list">
+        <!-- filter items -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Document Statistics Modal Overlay -->
+  <div id="stats-overlay" class="palette-overlay">
+    <div class="palette-box" style="padding: 24px; color: var(--text-primary);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom:10px;">
+        <h3 style="font-weight:700;">Document Statistics</h3>
+        <button id="close-stats-btn" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.5rem;">&times;</button>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; font-size:0.95rem;">
+        <div>Words: <strong id="stat-words" style="color:var(--accent);">0</strong></div>
+        <div>Characters: <strong id="stat-chars" style="color:var(--accent);">0</strong></div>
+        <div>Lines: <strong id="stat-lines" style="color:var(--accent);">0</strong></div>
+        <div>Sections: <strong id="stat-sections" style="color:var(--accent);">0</strong></div>
+        <div>Equations: <strong id="stat-equations" style="color:var(--accent);">0</strong></div>
+        <div>Tables: <strong id="stat-tables" style="color:var(--accent);">0</strong></div>
+        <div>Figures: <strong id="stat-figures" style="color:var(--accent);">0</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gutter tooltip for PDF hovering -->
+  <div id="pdf-hover-tooltip" class="pdf-hover-tooltip">Line 1</div>
+
+  <style>
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+  <!-- Scripts: KaTeX & CodeMirror modules -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  
+  <script type="module">
+    import { EditorState, StateField, StateEffect } from 'https://esm.sh/@codemirror/state@6.4.1';
+    import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, gutter, GutterMarker } from 'https://esm.sh/@codemirror/view@6.26.3';
+    import { defaultKeymap, history, historyKeymap } from 'https://esm.sh/@codemirror/commands@6.3.3';
+    import { StreamLanguage, bracketMatching, foldGutter, foldKeymap } from 'https://esm.sh/@codemirror/language@6.10.1';
+    import { stex } from 'https://esm.sh/@codemirror/legacy-modes@6.3.3/mode/stex';
+    import { linter, lintGutter } from 'https://esm.sh/@codemirror/lint@6.5.0';
+
+    // ─────────────────────────────────────────────────────────────────
+    // SAMPLE LATEX DOCUMENT TEMPLATE
+    // ─────────────────────────────────────────────────────────────────
+    const SAMPLE_DOCUMENT = `\\documentclass{article}
+\\usepackage{amsmath}
+\\usepackage{graphicx}
+
+\\title{Introduction to LaTeX Studio}
+\\author{Your Name}
+\\date{\\today}
+
+\\begin{document}
+
+\\maketitle
+
+\\begin{abstract}
+This document demonstrates the live bidirectional LaTeX editor.
+Edit on either side and watch the other update instantly.
+\\end{abstract}
+
+\\tableofcontents
+
+\\section{Introduction}
+\\label{sec:intro}
+
+Welcome to \\textbf{LaTeX Studio} — a browser-based editor with \\textit{live
+bidirectional sync}. Click any element in the preview to jump to its source,
+or double-click to edit text directly in the preview.
+
+This is a second paragraph in the introduction. It references
+Section~\\ref{sec:math} for the mathematical content.
+
+\\subsection{Getting Started}
+
+To begin, simply edit the code on the left. The preview on the right
+updates automatically. You can also \\textbf{double-click any paragraph}
+in the preview to edit it directly — changes propagate back to the source.
+
+\\subsubsection{Key Features}
+
+\\begin{itemize}
+  \\item Live preview with 500ms debounce
+  \\item Click-to-source navigation
+  \\item Inline PDF editing with source sync
+  \\item Full math support via KaTeX
+\\end{itemize}
+
+\\section{Mathematical Expressions}
+\\label{sec:math}
+
+Inline math works like this: the famous identity is $e^{i\\pi} + 1 = 0$.
+
+Display equations are also supported:
+
+\\begin{equation}
+  \\label{eq:euler}
+  \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
+\\end{equation}
+
+Aligned equations:
+
+\\begin{align}
+  f(x) &= ax^2 + bx + c \\\\
+  f'(x) &= 2ax + b
+\\end{align}
+
+\\section{Tables and Figures}
+
+\\begin{table}[h]
+  \\centering
+  \\begin{tabular}{|l|c|r|}
+    \\hline
+    Name    & Score & Grade \\\\
+    \\hline
+    Alice   & 95    & A     \\\\
+    Bob     & 82    & B     \\\\
+    Charlie & 74    & C     \\\\
+    \\hline
+  \\end{tabular}
+  \\caption{Student scores for the final exam.}
+  \\label{tab:scores}
+\\end{table}
+
+Table~\\ref{tab:scores} shows the student scores.
+
+\\begin{figure}[h]
+  \\centering
+  \\includegraphics[width=0.5\\textwidth]{example-image}
+  \\caption{An example figure placeholder.}
+  \\label{fig:example}
+\\end{figure}
+
+\\section{Lists and References}
+
+\\begin{enumerate}
+  \\item First item with a footnote.\\footnote{This is the footnote text.}
+  \\item Second item referencing Equation~\\ref{eq:euler}
+  \\item Third item with \\texttt{monospace text}
+\\end{enumerate}
+
+As discussed in \\cite{knuth1984} and \\cite{lamport1994}, the typesetting
+system has a long history.
+
+\\section{Conclusion}
+
+This editor supports the full round-trip workflow: write LaTeX, see it
+rendered instantly, click the preview to navigate the source, or
+\\textbf{double-click} to edit directly in the preview and have changes
+reflected in the source code automatically.
+
+\\begin{thebibliography}{9}
+  \\bibitem{knuth1984} Knuth, D. E. (1984). \\textit{The TeXbook}. Addison-Wesley.
+  \\bibitem{lamport1994} Lamport, L. (1994). \\textit{LaTeX: A Document Preparation System}. Addison-Wesley.
+\\end{thebibliography}
+
+\\end{document}`;
+
+    // Snippets data for command palette
+    const SNIPPETS = [
+      { name: 'Fraction \\frac{}{}', code: '\\frac{numerator}{denominator}', desc: 'Fraction expression' },
+      { name: 'Bold \\textbf{}', code: '\\textbf{text}', desc: 'Bold text formatting' },
+      { name: 'Italic \\textit{}', code: '\\textit{text}', desc: 'Italic text formatting' },
+      { name: 'Underline \\underline{}', code: '\\underline{text}', desc: 'Underlined text formatting' },
+      { name: 'Monospace \\texttt{}', code: '\\texttt{code}', desc: 'Monospaced text style' },
+      { name: 'Section \\section{}', code: '\\section{Section Name}', desc: 'Major document heading' },
+      { name: 'Subsection \\subsection{}', code: '\\subsection{Subsection Name}', desc: 'Sub heading level 2' },
+      { name: 'TOC \\tableofcontents', code: '\\tableofcontents', desc: 'Add Table of Contents' },
+      { name: 'Itemize List \\begin{itemize}', code: '\\begin{itemize}\n  \\item \n\\end{itemize}', desc: 'Bulleted list' },
+      { name: 'Enumerate List \\begin{enumerate}', code: '\\begin{enumerate}\n  \\item \n\\end{enumerate}', desc: 'Numbered list' },
+      { name: 'Description List \\begin{description}', code: '\\begin{description}\n  \\item[Label] Details\n\\end{description}', desc: 'Labled description list' },
+      { name: 'Equation \\begin{equation}', code: '\\begin{equation}\n  E = mc^2 \\label{eq:energy}\n\\end{equation}', desc: 'Display equation block' },
+      { name: 'Table \\begin{table}', code: '\\begin{table}[h]\n  \\centering\n  \\begin{tabular}{|l|c|r|}\n    \\hline\n    Header 1 & Header 2 & Header 3 \\\\\n    \\hline\n    Row 1 & Value 2 & Right 3 \\\\\n    \\hline\n  \\end{tabular}\n  \\caption{My Table Caption}\n  \\label{tab:table1}\n\\end{table}', desc: 'Floating grid table' },
+      { name: 'Figure \\begin{figure}', code: '\\begin{figure}[h]\n  \\centering\n  \\includegraphics{example-image}\n  \\caption{Figure Caption}\n  \\label{fig:fig1}\n\\end{figure}', desc: 'Graphic figure block' },
+      { name: 'Reference \\ref{}', code: '\\ref{label_key}', desc: 'Cross-reference citation' },
+      { name: 'Citation \\cite{}', code: '\\cite{cite_key}', desc: 'Bibliography reference' },
+      { name: 'Footnote \\footnote{}', code: '\\footnote{Footnote text}', desc: 'Bottom footnotes' }
+    ];
+
+    // ─────────────────────────────────────────────────────────────────
+    // CUSTOM SIMULATED LATEX PARSER & COMPILER CLASS
+    // ─────────────────────────────────────────────────────────────────
+    class LaTeXCompiler {
+      constructor(source) {
+        this.source = source;
+        // Expand macros first
+        this.expandedText = this.expandMacros(source);
+        
+        // Strip comments but preserve newlines & character positions (via spaces padding)
+        this.cleanText = this.expandedText.replace(/(?<!\\)%.*/g, (match) => ' '.repeat(match.length));
+        
+        this.title = 'Untitled LaTeX Document';
+        this.author = '';
+        this.date = '';
+        
+        this.labels = {};       // Key -> Number/Section string
+        this.citations = {};    // Key -> Citation number index
+        this.footnotes = [];    // Array of { id, content }
+        this.footnoteCount = 0;
+        
+        this.sectionCount = 0;
+        this.subsectionCount = 0;
+        this.subsubsectionCount = 0;
+        this.equationCount = 0;
+        this.figureCount = 0;
+        this.tableCount = 0;
+        
+        this.errors = [];
+        this.outline = [];
+      }
+
+      getLineNum(index) {
+        return this.cleanText.substring(0, index).split('\n').length;
+      }
+
+      extractBraceContent(str, startIndex) {
+        let depth = 0;
+        let result = '';
+        for (let i = startIndex; i < str.length; i++) {
+          let char = str[i];
+          if (char === '{') {
+            depth++;
+            if (depth === 1) continue;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0) {
+              return { content: result, endIndex: i };
+            }
+          }
+          if (depth > 0) {
+            result += char;
+          }
+        }
+        return null;
+      }
+
+      findMatchingEnd(text, startPos, envName) {
+        let depth = 1;
+        const regex = new RegExp(`\\\\(begin|end)\\s*\\{${envName}\\}`, 'g');
+        regex.lastIndex = startPos;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          if (match[1] === 'begin') {
+            depth++;
+          } else {
+            depth--;
+            if (depth === 0) {
+              return match.index;
+            }
+          }
+        }
+        return -1;
+      }
+
+      // Proximity spacing helper
+      convertLaTeXLength(len) {
+        len = len.trim();
+        if (len.includes('\\textwidth')) {
+          const m = len.match(/([0-9.]+)\s*\\textwidth/);
+          return m ? (parseFloat(m[1]) * 100) + '%' : '100%';
+        }
+        if (len.includes('\\linewidth')) {
+          const m = len.match(/([0-9.]+)\s*\\linewidth/);
+          return m ? (parseFloat(m[1]) * 100) + '%' : '100%';
+        }
+        const m = len.match(/^(-?[0-9.]+)\s*([a-zA-Z]+)?/);
+        if (m) {
+          const val = m[1];
+          const unit = m[2] || 'pt';
+          if (unit === 'pt') return (parseFloat(val) * 1.33) + 'px';
+          if (['cm', 'mm', 'in', 'em', 'ex', 'px', '%'].includes(unit)) return val + unit;
+        }
+        return len;
+      }
+
+      // Macro expansion pre-pass
+      expandMacros(text) {
+        const macroRegex = /\\newcommand\s*\{\\([a-zA-Z]+)\}\s*(?:\[(\d+)\])?\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g;
+        const macros = {};
+        let match;
+        while ((match = macroRegex.exec(text)) !== null) {
+          macros[match[1]] = {
+            numArgs: match[2] ? parseInt(match[2]) : 0,
+            defn: match[3]
+          };
+        }
+        
+        let expanded = text.replace(macroRegex, '');
+        let expandedAny = true;
+        let iterations = 0;
+        
+        while (expandedAny && iterations < 5) {
+          expandedAny = false;
+          iterations++;
+          
+          for (const [name, macro] of Object.entries(macros)) {
+            if (macro.numArgs === 0) {
+              const usageRegex = new RegExp(`\\\\${name}\\b`, 'g');
+              if (usageRegex.test(expanded)) {
+                expanded = expanded.replace(usageRegex, macro.defn);
+                expandedAny = true;
+              }
+            } else {
+              const usageRegex = new RegExp(`\\\\${name}(?=\\s*\\{)`, 'g');
+              let m;
+              while ((m = usageRegex.exec(expanded)) !== null) {
+                const args = [];
+                let pos = m.index + m[0].length;
+                let currentEnd = pos;
+                for (let i = 0; i < macro.numArgs; i++) {
+                  while (pos < expanded.length && /\s/.test(expanded[pos])) pos++;
+                  if (expanded[pos] === '{') {
+                    const argBrace = this.extractBraceContent(expanded, pos);
+                    if (argBrace) {
+                      args.push(argBrace.content);
+                      pos = argBrace.endIndex + 1;
+                      currentEnd = pos;
+                    } else {
+                      break;
+                    }
+                  } else {
+                    break;
+                  }
+                }
+                if (args.length === macro.numArgs) {
+                  let replaced = macro.defn;
+                  for (let i = 0; i < args.length; i++) {
+                    replaced = replaced.replace(new RegExp(`#${i+1}`, 'g'), args[i]);
+                  }
+                  expanded = expanded.substring(0, m.index) + replaced + expanded.substring(currentEnd);
+                  expandedAny = true;
+                  usageRegex.lastIndex = 0;
+                } else {
+                  break;
+                }
+              }
+            }
+          }
+        }
+        return expanded;
+      }
+
+      // Pre-scan structure metrics & index labels globally
+      preScan() {
+        const titleMatch = this.cleanText.match(/\\title\s*\{((?:[^{}]|\{[^{}]*\})*)\}/);
+        if (titleMatch) this.title = titleMatch[1];
+        
+        const authorMatch = this.cleanText.match(/\\author\s*\{((?:[^{}]|\{[^{}]*\})*)\}/);
+        if (authorMatch) this.author = authorMatch[1];
+        
+        const dateMatch = this.cleanText.match(/\\date\s*\{((?:[^{}]|\{[^{}]*\})*)\}/);
+        if (dateMatch) this.date = dateMatch[1];
+
+        // extract bibliography
+        const bibRegex = /\\begin\s*\{thebibliography\}\s*\{[^}]*\}\s*([\s\S]*?)\\end\s*\{thebibliography\}/;
+        const bibMatch = bibRegex.exec(this.cleanText);
+        if (bibMatch) {
+          const bibContent = bibMatch[1];
+          const itemRegex = /\\bibitem\s*\{([^}]+)\}/g;
+          let itemMatch;
+          let idx = 1;
+          while ((itemMatch = itemRegex.exec(bibContent)) !== null) {
+            this.citations[itemMatch[1]] = idx++;
+          }
+        }
+
+        // Sequential index labels globally
+        const labelAndCounterRegex = /\\(section|subsection|subsubsection|begin\s*\{equation\}|begin\s*\{figure\}|begin\s*\{table\}|label\s*\{([^}]+)\})/g;
+        let match;
+        let sCount = 0;
+        let subCount = 0;
+        let subsubCount = 0;
+        let eqCount = 0;
+        let figCount = 0;
+        let tabCount = 0;
+        let activeRef = '';
+        
+        while ((match = labelAndCounterRegex.exec(this.cleanText)) !== null) {
+          const cmd = match[1];
+          if (cmd.startsWith('section')) {
+            sCount++;
+            subCount = 0;
+            subsubCount = 0;
+            activeRef = `${sCount}`;
+          } else if (cmd.startsWith('subsection')) {
+            subCount++;
+            subsubCount = 0;
+            activeRef = `${sCount}.${subCount}`;
+          } else if (cmd.startsWith('subsubsection')) {
+            subsubCount++;
+            activeRef = `${sCount}.${subCount}.${subsubCount}`;
+          } else if (cmd.startsWith('begin') && cmd.includes('equation')) {
+            eqCount++;
+            activeRef = `${eqCount}`;
+          } else if (cmd.startsWith('begin') && cmd.includes('figure')) {
+            figCount++;
+            activeRef = `${figCount}`;
+          } else if (cmd.startsWith('begin') && cmd.includes('table')) {
+            tabCount++;
+            activeRef = `${tabCount}`;
+          } else if (cmd.startsWith('label')) {
+            this.labels[match[2]] = activeRef;
+          }
+        }
+      }
+
+      // Parse blocks
+      parseBlocks() {
+        const blocks = [];
+        const docStartRegex = /\\begin\s*\{document\}/;
+        const docEndRegex = /\\end\s*\{document\}/;
+        
+        let bodyText = this.cleanText;
+        let bodyOffset = 0;
+        
+        const startMatch = docStartRegex.exec(this.cleanText);
+        const endMatch = docEndRegex.exec(this.cleanText);
+        
+        if (startMatch) {
+          bodyOffset = startMatch.index + startMatch[0].length;
+          let endOffset = this.cleanText.length;
+          if (endMatch) {
+            endOffset = endMatch.index;
+          }
+          bodyText = this.cleanText.substring(bodyOffset, endOffset);
+        }
+        
+        let bodyPos = 0;
+        while (bodyPos < bodyText.length) {
+          const rest = bodyText.substring(bodyPos);
+          const wsMatch = rest.match(/^\s+/);
+          if (wsMatch) {
+            bodyPos += wsMatch[0].length;
+            continue;
+          }
+          
+          const absPos = bodyOffset + bodyPos;
+          const lineNum = this.getLineNum(absPos);
+          
+          if (rest.startsWith('\\maketitle')) {
+            blocks.push({ type: 'maketitle', line: lineNum, content: '' });
+            bodyPos += '\\maketitle'.length;
+            continue;
+          }
+
+          if (rest.startsWith('\\tableofcontents')) {
+            blocks.push({ type: 'tableofcontents', line: lineNum, content: '' });
+            bodyPos += '\\tableofcontents'.length;
+            continue;
+          }
+          
+          const secMatch = rest.match(/^\\(section|subsection|subsubsection)\b/);
+          if (secMatch) {
+            const secType = secMatch[1];
+            let argStart = bodyPos + secMatch[0].length;
+            while (argStart < bodyText.length && bodyText[argStart] !== '{') argStart++;
+            if (argStart < bodyText.length) {
+              const braceResult = this.extractBraceContent(bodyText, argStart);
+              if (braceResult) {
+                blocks.push({
+                  type: secType,
+                  line: lineNum,
+                  content: braceResult.content
+                });
+                bodyPos = braceResult.endIndex + 1;
+                continue;
+              }
+            }
+          }
+          
+          const envMatch = rest.match(/^\\begin\s*\{([^}]+)\}/);
+          if (envMatch) {
+            const envName = envMatch[1];
+            const envEndStr = `\\end{${envName}}`;
+            const searchStart = bodyPos + envMatch[0].length;
+            const endOffset = this.findMatchingEnd(bodyText, searchStart, envName);
+            if (endOffset !== -1) {
+              const envContent = bodyText.substring(searchStart, endOffset);
+              blocks.push({
+                type: 'environment',
+                envName: envName,
+                line: lineNum,
+                content: envContent
+              });
+              bodyPos = endOffset + envEndStr.length;
+              continue;
+            } else {
+              // Fatal error: Environment unmatched end. We create a broken block
+              blocks.push({
+                type: 'broken_env',
+                envName: envName,
+                line: lineNum,
+                content: rest.split('\n')[0]
+              });
+              bodyPos += envMatch[0].length;
+              continue;
+            }
+          }
+          
+          if (rest.startsWith('$$')) {
+            const endMath = bodyText.indexOf('$$', bodyPos + 2);
+            if (endMath !== -1) {
+              blocks.push({
+                type: 'displaymath',
+                line: lineNum,
+                content: bodyText.substring(bodyPos + 2, endMath)
+              });
+              bodyPos = endMath + 2;
+              continue;
+            }
+          }
+          if (rest.startsWith('\\[')) {
+            const endMath = bodyText.indexOf('\\]', bodyPos + 2);
+            if (endMath !== -1) {
+              blocks.push({
+                type: 'displaymath',
+                line: lineNum,
+                content: bodyText.substring(bodyPos + 2, endMath)
+              });
+              bodyPos = endMath + 2;
+              continue;
+            }
+          }
+          
+          let nextBlockPos = bodyPos;
+          let paraText = '';
+          while (nextBlockPos < bodyText.length) {
+            const sub = bodyText.substring(nextBlockPos);
+            if (sub.match(/^\n\s*\n/) || sub.startsWith('\\par') || 
+                sub.match(/^\\(section|subsection|subsubsection)\b/) || 
+                sub.match(/^\\begin\s*\{/) || 
+                sub.startsWith('\\maketitle') || 
+                sub.startsWith('\\tableofcontents') ||
+                sub.startsWith('$$') || 
+                sub.startsWith('\\[') ||
+                sub.startsWith('\\end{document}')) {
+              break;
+            }
+            paraText += bodyText[nextBlockPos];
+            nextBlockPos++;
+          }
+          
+          if (bodyText.substring(nextBlockPos).startsWith('\\par')) {
+            nextBlockPos += 4;
+          }
+          
+          if (paraText.trim() !== '') {
+            blocks.push({ type: 'paragraph', line: lineNum, content: paraText });
+          }
+          bodyPos = nextBlockPos;
+        }
+        
+        return blocks;
+      }
+
+      // Assign outline numbers
+      processStructure(blocks) {
+        for (let block of blocks) {
+          if (block.type === 'section') {
+            this.sectionCount++;
+            this.subsectionCount = 0;
+            this.subsubsectionCount = 0;
+            block.number = `${this.sectionCount}`;
+            this.outline.push({ type: 'section', title: block.content, number: block.number, line: block.line });
+          } else if (block.type === 'subsection') {
+            this.subsectionCount++;
+            this.subsubsectionCount = 0;
+            block.number = `${this.sectionCount}.${this.subsectionCount}`;
+            this.outline.push({ type: 'subsection', title: block.content, number: block.number, line: block.line });
+          } else if (block.type === 'subsubsection') {
+            this.subsubsectionCount++;
+            block.number = `${this.sectionCount}.${this.subsectionCount}.${this.subsubsectionCount}`;
+            this.outline.push({ type: 'subsubsection', title: block.content, number: block.number, line: block.line });
+          } else if (block.type === 'environment') {
+            if (block.envName === 'equation') {
+              this.equationCount++;
+              block.number = `${this.equationCount}`;
+            } else if (block.envName === 'figure') {
+              this.figureCount++;
+              block.number = `${this.figureCount}`;
+            } else if (block.envName === 'table') {
+              this.tableCount++;
+              block.number = `${this.tableCount}`;
+            }
+          }
+        }
+      }
+
+      // Inline formatter with leaf span tags wrapping raw text runs
+      renderInline(text, lineNum) {
+        let pos = 0;
+        let html = '';
+        
+        while (pos < text.length) {
+          // Inline math $...$
+          if (text[pos] === '$') {
+            let endMath = text.indexOf('$', pos + 1);
+            if (endMath !== -1) {
+              let math = text.substring(pos + 1, endMath);
+              try {
+                html += katex.renderToString(math, { displayMode: false, throwOnError: false });
+              } catch (e) {
+                html += `$${math}$`;
+              }
+              pos = endMath + 1;
+              continue;
+            }
+          }
+          // Inline math \(...\)
+          if (text.substring(pos).startsWith('\\(')) {
+            let endMath = text.indexOf('\\)', pos + 2);
+            if (endMath !== -1) {
+              let math = text.substring(pos + 2, endMath);
+              try {
+                html += katex.renderToString(math, { displayMode: false, throwOnError: false });
+              } catch (e) {
+                html += `\\(${math}\\)`;
+              }
+              pos = endMath + 2;
+              continue;
+            }
+          }
+
+          // Backslash commands
+          if (text[pos] === '\\') {
+            let cmdMatch = text.substring(pos).match(/^\\([a-zA-Z]+)/);
+            if (cmdMatch) {
+              let cmd = cmdMatch[1];
+              let cmdLen = cmdMatch[0].length;
+              
+              if (['textbf', 'textit', 'underline', 'emph', 'ref', 'cite', 'footnote', 'texttt', 'hspace', 'vspace'].includes(cmd)) {
+                let argStart = pos + cmdLen;
+                while (argStart < text.length && text[argStart] !== '{') argStart++;
+                if (argStart < text.length) {
+                  let braceResult = this.extractBraceContent(text, argStart);
+                  if (braceResult) {
+                    let arg = braceResult.content;
+                    if (cmd === 'textbf') {
+                      html += `<strong>${this.renderInline(arg, lineNum)}</strong>`;
+                    } else if (cmd === 'textit' || cmd === 'emph') {
+                      html += `<em>${this.renderInline(arg, lineNum)}</em>`;
+                    } else if (cmd === 'underline') {
+                      html += `<span class="underline">${this.renderInline(arg, lineNum)}</span>`;
+                    } else if (cmd === 'texttt') {
+                      html += `<code class="tex-monospace">${this.renderInline(arg, lineNum)}</code>`;
+                    } else if (cmd === 'hspace') {
+                      html += `<span style="display: inline-block; width: ${this.convertLaTeXLength(arg)};"></span>`;
+                    } else if (cmd === 'vspace') {
+                      html += `<span style="display: block; height: ${this.convertLaTeXLength(arg)};"></span>`;
+                    } else if (cmd === 'ref') {
+                      const num = this.labels[arg] || '??';
+                      html += `<a href="#" class="pdf-ref" data-ref="${arg}">${num}</a>`;
+                    } else if (cmd === 'cite') {
+                      const num = this.citations[arg] || '?';
+                      html += `<a href="#" class="pdf-cite" data-cite="${arg}">[${num}]</a>`;
+                    } else if (cmd === 'footnote') {
+                      this.footnoteCount++;
+                      const id = this.footnoteCount;
+                      this.footnotes.push({ id: id, content: arg });
+                      html += `<sup class="pdf-footnote-ref" data-fn-idx="${id}">[${id}]</sup>`;
+                    }
+                    pos = braceResult.endIndex + 1;
+                    continue;
+                  }
+                }
+              } else if (cmd === 'textcolor') {
+                let arg1Start = pos + cmdLen;
+                while (arg1Start < text.length && text[arg1Start] !== '{') arg1Start++;
+                if (arg1Start < text.length) {
+                  let brace1 = this.extractBraceContent(text, arg1Start);
+                  if (brace1) {
+                    let color = brace1.content;
+                    let arg2Start = brace1.endIndex + 1;
+                    while (arg2Start < text.length && text[arg2Start] !== '{') arg2Start++;
+                    if (arg2Start < text.length) {
+                      let brace2 = this.extractBraceContent(text, arg2Start);
+                      if (brace2) {
+                        let innerText = brace2.content;
+                        html += `<span style="color: ${color};">${this.renderInline(innerText, lineNum)}</span>`;
+                        pos = brace2.endIndex + 1;
+                        continue;
+                      }
+                    }
+                  }
+                }
+              } else if (cmd === 'newline' || cmd === '\\') {
+                html += `<br/>`;
+                pos += cmdLen;
+                continue;
+              } else {
+                html += `\\${cmd}`;
+                pos += cmdLen;
+                continue;
+              }
+            }
+          }
+          
+          // plain text run segment
+          let nextPos = pos;
+          let textRun = '';
+          while (nextPos < text.length && text[nextPos] !== '$' && text[nextPos] !== '\\') {
+            textRun += text[nextPos];
+            nextPos++;
+          }
+          
+          // wrap in editable cue class
+          html += `<span class="tex-text" data-source-line="${lineNum}">${textRun}</span>`;
+          pos = nextPos;
+        }
+        
+        return html;
+      }
+
+      // Block generators
+      renderMaketitle(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-title-block';
+        el.dataset.sourceLine = block.line;
+        
+        const titleEl = document.createElement('h1');
+        titleEl.className = 'latex-title';
+        titleEl.innerHTML = this.renderInline(this.title, block.line);
+        el.appendChild(titleEl);
+        
+        if (this.author) {
+          const authorEl = document.createElement('div');
+          authorEl.className = 'latex-author';
+          authorEl.innerHTML = this.renderInline(this.author, block.line);
+          el.appendChild(authorEl);
+        }
+        
+        if (this.date) {
+          const dateEl = document.createElement('div');
+          dateEl.className = 'latex-date';
+          dateEl.innerHTML = this.renderInline(this.date, block.line);
+          el.appendChild(dateEl);
+        }
+        return el;
+      }
+
+      renderTableOfContents(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-toc';
+        el.dataset.sourceLine = block.line;
+        
+        const heading = document.createElement('h2');
+        heading.className = 'latex-toc-heading';
+        heading.innerText = 'Contents';
+        el.appendChild(heading);
+        
+        const list = document.createElement('div');
+        list.className = 'latex-toc-list';
+        
+        this.outline.forEach(item => {
+          const itemEl = document.createElement('div');
+          const depth = item.type === 'section' ? 1 : item.type === 'subsection' ? 2 : 3;
+          itemEl.className = `latex-toc-item depth-${depth}`;
+          
+          itemEl.innerHTML = `
+            <span class="toc-number">${item.number}</span>
+            <span class="toc-title">${item.title}</span>
+            <span class="toc-filler"></span>
+            <span class="toc-page"></span>
+          `;
+          
+          itemEl.addEventListener('click', () => {
+            highlightLine(item.line);
+          });
+          
+          list.appendChild(itemEl);
+        });
+        
+        el.appendChild(list);
+        return el;
+      }
+
+      renderAbstract(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-abstract';
+        el.dataset.sourceLine = block.line;
+        
+        const heading = document.createElement('div');
+        heading.className = 'latex-abstract-heading';
+        heading.innerText = 'Abstract';
+        el.appendChild(heading);
+        
+        const content = document.createElement('p');
+        content.className = 'latex-abstract-content';
+        content.innerHTML = this.renderInline(block.content, block.line);
+        el.appendChild(content);
+        return el;
+      }
+
+      renderSection(block) {
+        const tag = block.type === 'section' ? 'h2' : block.type === 'subsection' ? 'h3' : 'h4';
+        const el = document.createElement(tag);
+        el.className = `latex-${block.type}`;
+        el.dataset.sourceLine = block.line;
+        
+        const cleanTitle = block.content.replace(/\\label\s*\{[^}]*\}/g, '').trim();
+        
+        const numSpan = document.createElement('span');
+        numSpan.className = 'heading-number';
+        numSpan.innerText = block.number + ' ';
+        el.appendChild(numSpan);
+        
+        const textSpan = document.createElement('span');
+        textSpan.className = 'heading-text';
+        textSpan.innerHTML = this.renderInline(cleanTitle, block.line);
+        el.appendChild(textSpan);
+        return el;
+      }
+
+      renderParagraph(block) {
+        const el = document.createElement('p');
+        el.className = 'latex-paragraph';
+        el.dataset.sourceLine = block.line;
+        
+        let content = block.content.trim();
+        if (content.startsWith('\\noindent')) {
+          el.style.textIndent = '0';
+          content = content.replace(/^\\noindent\s*/, '');
+        }
+        
+        el.innerHTML = this.renderInline(content, block.line);
+        return el;
+      }
+
+      renderEquation(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-equation-block';
+        el.dataset.sourceLine = block.line;
+        
+        let mathContent = block.content.replace(/\\label\s*\{[^}]*\}/g, '').trim();
+        const mathWrapper = document.createElement('div');
+        mathWrapper.className = 'latex-equation-math';
+        
+        try {
+          mathWrapper.innerHTML = katex.renderToString(mathContent, { displayMode: true, throwOnError: false });
+        } catch (err) {
+          mathWrapper.innerText = mathContent;
+        }
+        el.appendChild(mathWrapper);
+        
+        if (block.number) {
+          const numEl = document.createElement('div');
+          numEl.className = 'latex-equation-number';
+          numEl.innerText = `(${block.number})`;
+          el.appendChild(numEl);
+        }
+        return el;
+      }
+
+      renderList(block) {
+        if (block.envName === 'description') {
+          return this.renderDescriptionList(block);
+        }
+        const tag = block.envName === 'itemize' ? 'ul' : 'ol';
+        const el = document.createElement(tag);
+        el.className = `latex-${block.envName}`;
+        el.dataset.sourceLine = block.line;
+        
+        const items = block.content.split(/\\item\b/);
+        for (let i = 1; i < items.length; i++) {
+          const li = document.createElement('li');
+          li.className = 'latex-list-item';
+          let itemContent = items[i].trim();
+          
+          let customBulletMatch = itemContent.match(/^\[(.*?)\]/);
+          if (customBulletMatch) {
+            li.style.listStyleType = 'none';
+            const bulletSpan = document.createElement('span');
+            bulletSpan.className = 'custom-bullet';
+            bulletSpan.innerHTML = this.renderInline(customBulletMatch[1], block.line);
+            li.appendChild(bulletSpan);
+            itemContent = itemContent.substring(customBulletMatch[0].length).trim();
+          }
+          
+          const contentSpan = document.createElement('span');
+          contentSpan.innerHTML = this.renderInline(itemContent, block.line);
+          li.appendChild(contentSpan);
+          el.appendChild(li);
+        }
+        return el;
+      }
+
+      renderDescriptionList(block) {
+        const el = document.createElement('dl');
+        el.className = 'latex-description';
+        el.dataset.sourceLine = block.line;
+        
+        const items = block.content.split(/\\item\b/);
+        for (let i = 1; i < items.length; i++) {
+          let itemContent = items[i].trim();
+          let label = '';
+          let desc = itemContent;
+          
+          let labelMatch = itemContent.match(/^\[(.*?)\]/);
+          if (labelMatch) {
+            label = labelMatch[1];
+            desc = itemContent.substring(labelMatch[0].length).trim();
+          }
+          
+          const dt = document.createElement('dt');
+          dt.className = 'latex-desc-term';
+          dt.innerHTML = this.renderInline(label, block.line);
+          el.appendChild(dt);
+          
+          const dd = document.createElement('dd');
+          dd.className = 'latex-desc-details';
+          dd.innerHTML = this.renderInline(desc, block.line);
+          el.appendChild(dd);
+        }
+        return el;
+      }
+
+      renderFigure(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-figure';
+        el.dataset.sourceLine = block.line;
+        
+        const imgRegex = /\\includegraphics\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/;
+        const imgMatch = imgRegex.exec(block.content);
+        const imgPath = imgMatch ? imgMatch[1] : 'example-image';
+        
+        const captionRegex = /\\caption\s*\{((?:[^{}]|\{[^{}]*\})*)\}/;
+        const captionMatch = captionRegex.exec(block.content);
+        const captionText = captionMatch ? captionMatch[1] : '';
+        
+        const placeholder = document.createElement('div');
+        placeholder.className = 'latex-figure-placeholder';
+        placeholder.innerHTML = `
+          <svg class="figure-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+          <span class="figure-path">${imgPath}</span>
+        `;
+        el.appendChild(placeholder);
+        
+        if (captionText) {
+          const captionEl = document.createElement('div');
+          captionEl.className = 'latex-figure-caption';
+          captionEl.innerHTML = `<strong>Figure ${block.number}:</strong> ` + this.renderInline(captionText, block.line);
+          el.appendChild(captionEl);
+        }
+        return el;
+      }
+
+      renderTable(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-table-container';
+        el.dataset.sourceLine = block.line;
+        
+        const captionRegex = /\\caption\s*\{((?:[^{}]|\{[^{}]*\})*)\}/;
+        const captionMatch = captionRegex.exec(block.content);
+        const captionText = captionMatch ? captionMatch[1] : '';
+        
+        const tabularRegex = /\\begin\s*\{tabular\}\s*\{([^}]+)\}([\s\S]*?)\\end\s*\{tabular\}/;
+        const tabMatch = tabularRegex.exec(block.content);
+        
+        if (tabMatch) {
+          const colsSpec = tabMatch[1];
+          const tabContent = tabMatch[2];
+          
+          const table = document.createElement('table');
+          table.className = 'latex-table';
+          
+          const colStyles = [];
+          let borderLeft = false;
+          for (let char of colsSpec) {
+            if (char === '|') {
+              borderLeft = true;
+            } else if (['l', 'c', 'r'].includes(char)) {
+              colStyles.push({
+                align: char === 'l' ? 'left' : char === 'c' ? 'center' : 'right',
+                borderLeft: borderLeft
+              });
+              borderLeft = false;
+            }
+          }
+          
+          const rawRows = tabContent.split('\\\\');
+          const tbody = document.createElement('tbody');
+          
+          let nextRowHline = false;
+          for (let rawRow of rawRows) {
+            rawRow = rawRow.trim();
+            if (rawRow === '') continue;
+            
+            if (rawRow === '\\hline') {
+              nextRowHline = true;
+              continue;
+            }
+            
+            let rowHlineBefore = nextRowHline;
+            nextRowHline = false;
+            
+            if (rawRow.startsWith('\\hline')) {
+              rowHlineBefore = true;
+              rawRow = rawRow.replace(/^\\hline\s*/, '');
+            }
+            if (rawRow.endsWith('\\hline')) {
+              nextRowHline = true;
+              rawRow = rawRow.replace(/\s*\\hline$/, '');
+            }
+            
+            const tr = document.createElement('tr');
+            if (rowHlineBefore) {
+              tr.className = 'border-top';
+            }
+            
+            const cells = rawRow.split('&');
+            for (let i = 0; i < cells.length; i++) {
+              const td = document.createElement('td');
+              const cellText = cells[i].trim();
+              td.innerHTML = this.renderInline(cellText, block.line);
+              
+              const spec = colStyles[i] || { align: 'left', borderLeft: false };
+              td.style.textAlign = spec.align;
+              if (spec.borderLeft) {
+                td.style.borderLeft = '1px solid #000000';
+              }
+              tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+          el.appendChild(table);
+        }
+
+        if (captionText) {
+          const captionEl = document.createElement('div');
+          captionEl.className = 'latex-table-caption';
+          captionEl.innerHTML = `<strong>Table ${block.number}:</strong> ` + this.renderInline(captionText, block.line);
+          el.appendChild(captionEl);
+        }
+        return el;
+      }
+
+      renderBibliography(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-bibliography';
+        el.dataset.sourceLine = block.line;
+        
+        const heading = document.createElement('h2');
+        heading.className = 'latex-bibliography-heading';
+        heading.innerText = 'References';
+        el.appendChild(heading);
+        
+        const list = document.createElement('ul');
+        list.className = 'latex-bib-list';
+        
+        const bibItems = block.content.split(/\\bibitem\s*\{([^}]+)\}/);
+        let idx = 1;
+        for (let i = 1; i < bibItems.length; i += 2) {
+          const key = bibItems[i];
+          const desc = bibItems[i+1].trim();
+          
+          const li = document.createElement('li');
+          li.className = 'latex-bib-item';
+          li.id = `bib-${key}`;
+          
+          const label = document.createElement('span');
+          label.className = 'bib-label';
+          label.innerText = `[${idx}] `;
+          li.appendChild(label);
+          
+          const text = document.createElement('span');
+          text.innerHTML = this.renderInline(desc, block.line);
+          li.appendChild(text);
+          
+          list.appendChild(li);
+          idx++;
+        }
+        el.appendChild(list);
+        return el;
+      }
+
+      renderBrokenEnv(block) {
+        const el = document.createElement('div');
+        el.className = 'latex-warning-box';
+        el.dataset.sourceLine = block.line;
+        el.innerHTML = `<strong>⚠ Parse error near line ${block.line}:</strong> Mismatched or unclosed environment \\begin{${block.envName}}.`;
+        return el;
+      }
+
+      // Compiler builder driver
+      compile() {
+        this.preScan();
+        const blocks = this.parseBlocks();
+        this.processStructure(blocks);
+        
+        const renderedElements = [];
+        for (let block of blocks) {
+          let node;
+          if (block.type === 'maketitle') {
+            node = this.renderMaketitle(block);
+          } else if (block.type === 'tableofcontents') {
+            node = this.renderTableOfContents(block);
+          } else if (block.type === 'abstract') {
+            node = this.renderAbstract(block);
+          } else if (['section', 'subsection', 'subsubsection'].includes(block.type)) {
+            node = this.renderSection(block);
+          } else if (block.type === 'paragraph') {
+            node = this.renderParagraph(block);
+          } else if (block.type === 'displaymath') {
+            node = this.renderEquation(block);
+          } else if (block.type === 'broken_env') {
+            node = this.renderBrokenEnv(block);
+          } else if (block.type === 'environment') {
+            if (['itemize', 'enumerate', 'description'].includes(block.envName)) {
+              node = this.renderList(block);
+            } else if (block.envName === 'equation' || block.envName === 'align') {
+              node = this.renderEquation(block);
+            } else if (block.envName === 'figure') {
+              node = this.renderFigure(block);
+            } else if (block.envName === 'table') {
+              node = this.renderTable(block);
+            } else if (block.envName === 'abstract') {
+              node = this.renderAbstract(block);
+            } else if (block.envName === 'thebibliography') {
+              node = this.renderBibliography(block);
+            } else {
+              node = document.createElement('div');
+              node.className = 'latex-fallback-block';
+              node.dataset.sourceLine = block.line;
+              node.innerHTML = this.renderInline(block.content, block.line);
+            }
+          }
+          if (node) {
+            renderedElements.push(node);
+          }
+        }
+        
+        this.errors = this.checkErrors(this.source);
+        return {
+          elements: renderedElements,
+          errors: this.errors,
+          outline: this.outline,
+          footnotes: this.footnotes
+        };
+      }
+
+      // Syntax checker parser
+      checkErrors(text) {
+        const errors = [];
+        const cleanText = this.cleanText;
+        
+        // 1. Bracket match
+        const braceStack = [];
+        for (let i = 0; i < cleanText.length; i++) {
+          if (cleanText[i] === '{' && (i === 0 || cleanText[i-1] !== '\\')) {
+            braceStack.push({ pos: i, line: this.getLineNum(i) });
+          } else if (cleanText[i] === '}' && (i === 0 || cleanText[i-1] !== '\\')) {
+            if (braceStack.length === 0) {
+              errors.push({
+                line: this.getLineNum(i),
+                message: "Mismatched closing brace '}'",
+                severity: "error",
+                from: i,
+                to: i + 1
+              });
+            } else {
+              braceStack.pop();
+            }
+          }
+        }
+        for (let open of braceStack) {
+          errors.push({
+            line: open.line,
+            message: "Unbalanced braces (Unclosed '{')",
+            severity: "error",
+            from: open.pos,
+            to: open.pos + 1
+          });
+        }
+        
+        // 2. Unclosed environments
+        const envStack = [];
+        const envRegex = /\\(begin|end)\s*\{([^}]+)\}/g;
+        let match;
+        while ((match = envRegex.exec(cleanText)) !== null) {
+          const type = match[1];
+          const envName = match[2];
+          const line = this.getLineNum(match.index);
+          const startPos = match.index;
+          const endPos = match.index + match[0].length;
+          
+          if (type === 'begin') {
+            envStack.push({ name: envName, pos: startPos, line: line });
+          } else {
+            if (envStack.length === 0) {
+              errors.push({
+                line: line,
+                message: `Mismatched \\end{${envName}} without matching \\begin`,
+                severity: "error",
+                from: startPos,
+                to: endPos
+              });
+            } else {
+              const last = envStack.pop();
+              if (last.name !== envName) {
+                errors.push({
+                  line: line,
+                  message: `Mismatched environment: expected \\end{${last.name}}, found \\end{${envName}}`,
+                  severity: "error",
+                  from: startPos,
+                  to: endPos
+                });
+              }
+            }
+          }
+        }
+        for (let unclosed of envStack) {
+          errors.push({
+            line: unclosed.line,
+            message: `Unclosed environment \\begin{${unclosed.name}}`,
+            severity: "error",
+            from: unclosed.pos,
+            to: unclosed.pos + 12
+          });
+        }
+        
+        // 3. Required argument errors
+        const emptyArgRegex = /\\(section|subsection|subsubsection|textbf|textit|underline|emph|textcolor|ref|cite|footnote)\s*\{\s*\}/g;
+        while ((match = emptyArgRegex.exec(cleanText)) !== null) {
+          errors.push({
+            line: this.getLineNum(match.index),
+            message: `Empty required argument for \\${match[1]}`,
+            severity: "error",
+            from: match.index,
+            to: match.index + match[0].length
+          });
+        }
+
+        // 4. Check unresolved cross-references
+        const refCheckRegex = /\\ref\s*\{([^}]+)\}/g;
+        while ((match = refCheckRegex.exec(cleanText)) !== null) {
+          const key = match[1];
+          if (!this.labels[key]) {
+            errors.push({
+              line: this.getLineNum(match.index),
+              message: `Unresolved cross-reference: \\ref{${key}}`,
+              severity: "warning",
+              from: match.index,
+              to: match.index + match[0].length
+            });
+          }
+        }
+
+        // 5. Check unresolved citations
+        const citeCheckRegex = /\\cite\s*\{([^}]+)\}/g;
+        while ((match = citeCheckRegex.exec(cleanText)) !== null) {
+          const key = match[1];
+          if (!this.citations[key]) {
+            errors.push({
+              line: this.getLineNum(match.index),
+              message: `Unresolved citation reference: \\cite{${key}}`,
+              severity: "warning",
+              from: match.index,
+              to: match.index + match[0].length
+            });
+          }
+        }
+        
+        return errors;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // CLIENT SIDE PAGINATOR ENGINE
+    // ─────────────────────────────────────────────────────────────────
+    function createNewPageNode(pageNum) {
+      const page = document.createElement('div');
+      page.className = 'pdf-page';
+      page.dataset.page = pageNum;
+      
+      const content = document.createElement('div');
+      content.className = 'page-content';
+      page.appendChild(content);
+      
+      const footnotes = document.createElement('div');
+      footnotes.className = 'page-footnotes';
+      footnotes.style.display = 'none';
+      page.appendChild(footnotes);
+      
+      const footer = document.createElement('div');
+      footer.className = 'page-footer';
+      footer.innerText = pageNum;
+      page.appendChild(footer);
+      
+      return page;
+    }
+
+    function paginateDocument(elements, footnotes) {
+      const container = document.getElementById('pdf-pages-container');
+      container.innerHTML = '';
+      
+      let pageNum = 1;
+      let currentPage = createNewPageNode(pageNum);
+      container.appendChild(currentPage);
+      
+      let contentDiv = currentPage.querySelector('.page-content');
+      let footnotesDiv = currentPage.querySelector('.page-footnotes');
+      
+      const pageHeight = 1123; 
+      const maxContentHeight = pageHeight - 188;
+      
+      for (let el of elements) {
+        contentDiv.appendChild(el);
+        
+        // Footnotes rendering per page
+        const fnRefs = el.querySelectorAll('.pdf-footnote-ref');
+        const tempFns = [];
+        fnRefs.forEach(ref => {
+          const idx = parseInt(ref.dataset.fnIdx);
+          const fnData = footnotes.find(f => f.id === idx);
+          if (fnData) tempFns.push(fnData);
+        });
+        
+        if (tempFns.length > 0) {
+          footnotesDiv.style.display = 'block';
+          tempFns.forEach(fn => {
+            const fnEl = document.createElement('div');
+            fnEl.className = 'footnote-item';
+            fnEl.innerHTML = `<sup>${fn.id}</sup> ${fn.content}`;
+            footnotesDiv.appendChild(fnEl);
+          });
+        }
+        
+        const totalHeight = contentDiv.scrollHeight + (footnotesDiv.style.display === 'block' ? footnotesDiv.scrollHeight : 0);
+        if (totalHeight > maxContentHeight && contentDiv.children.length > 1) {
+          contentDiv.removeChild(el);
+          if (tempFns.length > 0) {
+            for (let k = 0; k < tempFns.length; k++) {
+              footnotesDiv.removeChild(footnotesDiv.lastChild);
+            }
+            if (footnotesDiv.children.length === 0) {
+              footnotesDiv.style.display = 'none';
+            }
+          }
+          
+          pageNum++;
+          currentPage = createNewPageNode(pageNum);
+          container.appendChild(currentPage);
+          contentDiv = currentPage.querySelector('.page-content');
+          footnotesDiv = currentPage.querySelector('.page-footnotes');
+          
+          contentDiv.appendChild(el);
+          if (tempFns.length > 0) {
+            footnotesDiv.style.display = 'block';
+            tempFns.forEach(fn => {
+              const fnEl = document.createElement('div');
+              fnEl.className = 'footnote-item';
+              fnEl.innerHTML = `<sup>${fn.id}</sup> ${fn.content}`;
+              footnotesDiv.appendChild(fnEl);
+            });
+          }
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // CODEMIRROR INTERACTION STATE FIELDS (Sync Highlights & Chevrons)
+    // ─────────────────────────────────────────────────────────────────
+    const highlightLineEffect = StateEffect.define();
+    const clearHighlightEffect = StateEffect.define();
+    const highlightDecoration = Decoration.line({
+      attributes: { class: "cm-sync-highlight" }
+    });
+
+    const highlightField = StateField.define({
+      create() { return Decoration.none; },
+      update(decorations, tr) {
+        decorations = decorations.map(tr.changes);
+        for (let e of tr.effects) {
+          if (e.is(highlightLineEffect)) {
+            const linePos = tr.state.doc.line(e.value).from;
+            decorations = Decoration.set([highlightDecoration.range(linePos)]);
+          } else if (e.is(clearHighlightEffect)) {
+            decorations = Decoration.none;
+          }
+        }
+        return decorations;
+      },
+      provide: f => EditorView.decorations.from(f)
+    });
+
+    // Code Format Green Flash Field
+    const greenFlashEffect = StateEffect.define();
+    const clearGreenFlashEffect = StateEffect.define();
+    const greenFlashDeco = Decoration.line({
+      attributes: { class: "cm-green-flash" }
+    });
+
+    const greenFlashField = StateField.define({
+      create() { return Decoration.none; },
+      update(decorations, tr) {
+        decorations = decorations.map(tr.changes);
+        for (let e of tr.effects) {
+          if (e.is(greenFlashEffect)) {
+            const pos = tr.state.doc.line(e.value).from;
+            decorations = Decoration.set([greenFlashDeco.range(pos)]);
+          } else if (e.is(clearGreenFlashEffect)) {
+            decorations = Decoration.none;
+          }
+        }
+        return decorations;
+      },
+      provide: f => EditorView.decorations.from(f)
+    });
+
+    // Custom Search highlights decoration field
+    const searchEffect = StateEffect.define();
+    const searchMatchDeco = Decoration.mark({ class: "cm-search-match" });
+    const activeSearchMatchDeco = Decoration.mark({ class: "cm-search-match-active" });
+
+    const searchField = StateField.define({
+      create() { return Decoration.none; },
+      update(decorations, tr) {
+        decorations = decorations.map(tr.changes);
+        for (let e of tr.effects) {
+          if (e.is(searchEffect)) {
+            const ranges = e.value.matches.map((m, idx) => {
+              if (idx === e.value.activeIndex) {
+                return activeSearchMatchDeco.range(m.from, m.to);
+              }
+              return searchMatchDeco.range(m.from, m.to);
+            });
+            decorations = Decoration.set(ranges, true);
+          }
+        }
+        return decorations;
+      },
+      provide: f => EditorView.decorations.from(f)
+    });
+
+    // Hover chevron gutter marker
+    const setHoverLineEffect = StateEffect.define();
+    const clearHoverLineEffect = StateEffect.define();
+    const hoverGutterMarker = new class extends GutterMarker {
+      toDOM() {
+        const el = document.createElement("span");
+        el.className = "cm-hover-chevron";
+        el.innerText = "▶";
+        return el;
+      }
+    };
+
+    const hoverLineField = StateField.define({
+      create() { return null; },
+      update(value, tr) {
+        for (let e of tr.effects) {
+          if (e.is(setHoverLineEffect)) return e.value;
+          if (e.is(clearHoverLineEffect)) return null;
+        }
+        return value;
+      }
+    });
+
+    const hoverGutter = gutter({
+      class: "cm-hover-gutter",
+      markers: v => {
+        const hoverLine = v.state.field(hoverLineField);
+        if (hoverLine !== null && hoverLine >= 1 && hoverLine <= v.state.doc.lines) {
+          const pos = v.state.doc.line(hoverLine).from;
+          return Decoration.set([hoverGutterMarker.range(pos)]);
+        }
+        return Decoration.none;
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────────
+    // GLOBAL APP STATE & CONTROLS
+    // ─────────────────────────────────────────────────────────────────
+    let editor = null;
+    let compiledBlocks = [];
+    let compiledOutline = [];
+    let compileTimeout = null;
+    let lastActiveBlock = null;
+    let docDirty = false;
+    
+    // Search-replace state variables
+    let searchMatches = [];
+    let searchActiveIndex = -1;
+
+    // Resizer Panel init
+    function initResizer() {
+      const leftPane = document.getElementById('left-editor-pane');
+      const divider = document.getElementById('pane-divider');
+      
+      const savedWidth = localStorage.getItem('latex-editor-divider-pos');
+      if (savedWidth) leftPane.style.width = savedWidth;
+
+      divider.addEventListener('mousedown', (e) => {
+        const startX = e.clientX;
+        const startWidth = leftPane.getBoundingClientRect().width;
+        
+        const onMouseMove = (moveEvent) => {
+          const deltaX = moveEvent.clientX - startX;
+          const totalWidth = leftPane.parentElement.getBoundingClientRect().width;
+          const newPercent = ((startWidth + deltaX) / totalWidth) * 100;
+          if (newPercent > 20 && newPercent < 80) {
+            leftPane.style.width = `${newPercent}%`;
+            localStorage.setItem('latex-editor-divider-pos', `${newPercent}%`);
+          }
+        };
+        
+        const onMouseUp = () => {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          divider.classList.remove('resizing');
+          document.body.style.userSelect = '';
+        };
+
+        divider.classList.add('resizing');
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+    }
+
+    // Toggle outline side bar panel
+    function initOutlineToggle() {
+      const panel = document.getElementById('outline-panel');
+      const btn = document.getElementById('outline-toggle');
+      btn.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        btn.classList.toggle('active');
+      });
+    }
+
+    // Zoom styling page transforms
+    function initZoomControls() {
+      const wrapper = document.getElementById('pdf-zoom-wrapper');
+      const select = document.getElementById('zoom-select');
+      const btnIn = document.getElementById('zoom-in-btn');
+      const btnOut = document.getElementById('zoom-out-btn');
+      
+      const savedZoom = localStorage.getItem('latex-editor-zoom') || '100';
+      select.value = savedZoom;
+      applyZoom(savedZoom);
+
+      function applyZoom(zoom) {
+        wrapper.style.setProperty('--pdf-zoom', zoom / 100);
+        wrapper.style.transform = `scale(${zoom / 100})`;
+        localStorage.setItem('latex-editor-zoom', zoom);
+      }
+      
+      select.addEventListener('change', () => {
+        applyZoom(select.value);
+      });
+      
+      btnIn.addEventListener('click', () => {
+        const idx = select.selectedIndex;
+        if (idx < select.options.length - 1) {
+          select.selectedIndex = idx + 1;
+          applyZoom(select.value);
+        }
+      });
+
+      btnOut.addEventListener('click', () => {
+        const idx = select.selectedIndex;
+        if (idx > 0) {
+          select.selectedIndex = idx - 1;
+          applyZoom(select.value);
+        }
+      });
+    }
+
+    // Toggle stylesheet themes
+    function initThemeToggle() {
+      const btn = document.getElementById('theme-toggle');
+      const sunIcon = document.getElementById('theme-sun-icon');
+      const moonIcon = document.getElementById('theme-moon-icon');
+      
+      const savedTheme = localStorage.getItem('latex-editor-theme') || 'dark';
+      document.body.setAttribute('data-theme', savedTheme);
+      updateIcons(savedTheme);
+      
+      btn.addEventListener('click', () => {
+        const current = document.body.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.body.setAttribute('data-theme', next);
+        localStorage.setItem('latex-editor-theme', next);
+        updateIcons(next);
+      });
+      
+      function updateIcons(theme) {
+        if (theme === 'light') {
+          sunIcon.style.display = 'none';
+          moonIcon.style.display = 'block';
+        } else {
+          sunIcon.style.display = 'block';
+          moonIcon.style.display = 'none';
+        }
+      }
+    }
+
+    // Code formatter logic (indent environments & word wrapping)
+    function initFormatter() {
+      const btn = document.getElementById('format-btn');
+      btn.addEventListener('click', () => {
+        const text = editor.state.doc.toString();
+        const formatted = formatLaTeX(text);
+        
+        editor.dispatch({
+          changes: { from: 0, to: editor.state.doc.length, insert: formatted }
+        });
+        compileLatex();
+        showStatusToast("Document formatted");
+      });
+    }
+
+    function formatLaTeX(text) {
+      const lines = text.split('\n');
+      let indentLevel = 0;
+      const indentWidth = 2;
+      const formattedLines = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (line.match(/^\\end\s*\{/)) {
+          indentLevel = Math.max(0, indentLevel - 1);
+        }
+        
+        const indentStr = ' '.repeat(indentLevel * indentWidth);
+        if (line === '') {
+          formattedLines.push('');
+        } else {
+          let indentedLine = indentStr + line;
+          if (indentedLine.length > 80 && !line.startsWith('\\') && !line.startsWith('$$') && !line.includes('$')) {
+            const words = line.split(' ');
+            let currentLine = indentStr;
+            for (let word of words) {
+              if ((currentLine + ' ' + word).length > 80) {
+                formattedLines.push(currentLine.trimEnd());
+                currentLine = indentStr + word;
+              } else {
+                if (currentLine === indentStr) {
+                  currentLine += word;
+                } else {
+                  currentLine += ' ' + word;
+                }
+              }
+            }
+            if (currentLine.trim() !== '') {
+              formattedLines.push(currentLine.trimEnd());
+            }
+          } else {
+            formattedLines.push(indentedLine);
+          }
+        }
+        
+        if (line.match(/^\\begin\s*\{/)) {
+          indentLevel++;
+        }
+      }
+      return formattedLines.join('\n');
+    }
+
+    // HTML & Source Exporters
+    function initExporter() {
+      // Export HTML
+      document.getElementById('export-btn').addEventListener('click', () => {
+        const pagesHtml = document.getElementById('pdf-pages-container').innerHTML;
+        const styles = document.querySelector('style').innerHTML;
+        
+        const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Exported Document - LaTeX Studio</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css">
+  <style>
+    body {
+      background-color: #f0f2fa;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: 'Computer Modern Serif', Georgia, serif;
+    }
+    ${styles}
+    .pdf-page { margin: 20px auto; }
+  </style>
+</head>
+<body>
+  <div id="pdf-pages-container">
+    ${pagesHtml}
+  </div>
+</body>
+</html>`;
+
+        const blob = new Blob([fullHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'compiled_document.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+
+      // Export Source .tex
+      document.getElementById('export-tex-btn').addEventListener('click', () => {
+        const source = editor.state.doc.toString();
+        const blob = new Blob([source], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'document.tex';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    // Auto save session logic
+    function initAutoSave() {
+      const saved = localStorage.getItem('latex-editor-source');
+      // If we have auto save, load it
+      if (saved && editor) {
+        editor.dispatch({
+          changes: { from: 0, to: editor.state.doc.length, insert: saved }
+        });
+      }
+
+      setInterval(() => {
+        if (docDirty) {
+          localStorage.setItem('latex-editor-source', editor.state.doc.toString());
+          docDirty = false;
+          showSavedIndicator();
+        }
+      }, 2000);
+    }
+
+    function showSavedIndicator() {
+      const el = document.getElementById('saved-indicator');
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.opacity = '0'; }, 1000);
+    }
+
+    // Proximity Scroll Preservation Helpers
+    function getTopmostVisibleSourceLine() {
+      const pane = document.getElementById('pdf-viewer-pane');
+      const paneRect = pane.getBoundingClientRect();
+      const elements = pane.querySelectorAll('[data-source-line]');
+      for (let el of elements) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top >= paneRect.top && rect.top <= paneRect.bottom) {
+          return {
+            line: parseInt(el.getAttribute('data-source-line')),
+            offset: rect.top - paneRect.top
+          };
+        }
+      }
+      return null;
+    }
+
+    function restoreReadingPosition(savedPos) {
+      if (!savedPos) return;
+      const pane = document.getElementById('pdf-viewer-pane');
+      const el = pane.querySelector(`[data-source-line="${savedPos.line}"]`);
+      if (el) {
+        const paneRect = pane.getBoundingClientRect();
+        pane.scrollTop = pane.scrollTop + (el.getBoundingClientRect().top - paneRect.top) - savedPos.offset;
+      }
+    }
+
+    // Compile LaTeX driver
+    function compileLatex() {
+      const btn = document.getElementById('compile-btn');
+      const spin = document.getElementById('compile-spin');
+      const btnTxt = document.getElementById('compile-btn-text');
+      
+      // Spinner state updates
+      btnTxt.innerText = "Compiling...";
+      spin.style.display = "inline-block";
+      
+      const text = editor.state.doc.toString();
+      
+      // Save topmost scroll position to prevent jumps
+      const savedPos = getTopmostVisibleSourceLine();
+      
+      const compiler = new LaTeXCompiler(text);
+      const res = compiler.compile();
+      
+      compiledBlocks = compiler.parseBlocks();
+      compiledOutline = res.outline;
+      
+      // Update outline structure tree
+      updateOutlinePanel(res.outline);
+      
+      // Paginate simulate preview pages
+      paginateDocument(res.elements, res.footnotes);
+      
+      // Restore scroll alignment reading location
+      restoreReadingPosition(savedPos);
+      
+      // Update page minimaps thumb
+      updateMinimap();
+      
+      // Update error console diagnostics log list
+      updateErrorDiagnostics(res.errors);
+      
+      // Update status statistics word count
+      updateStatistics(text, compiler);
+      
+      // Re-initialize hover sync trigger attachments
+      initPdfHoverEvents();
+      
+      // Spin finish highlights
+      setTimeout(() => {
+        spin.style.display = "none";
+        btnTxt.innerText = "✓ Compiled";
+        setTimeout(() => {
+          btnTxt.innerText = "Compile";
+        }, 1000);
+      }, 300);
+      
+      // Bind inline cite/ref links clicks navigation
+      attachPdfLinkEvents();
+    }
+
+    function attachPdfLinkEvents() {
+      document.querySelectorAll('.pdf-ref').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const key = link.dataset.ref;
+          const text = editor.state.doc.toString();
+          const target = `\\label{${key}}`;
+          const idx = text.indexOf(target);
+          if (idx !== -1) {
+            highlightLine(editor.state.doc.lineAt(idx).number);
+          }
+        });
+      });
+      
+      document.querySelectorAll('.pdf-cite').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const key = link.dataset.cite;
+          const text = editor.state.doc.toString();
+          const target = `\\bibitem{${key}}`;
+          const idx = text.indexOf(target);
+          if (idx !== -1) {
+            highlightLine(editor.state.doc.lineAt(idx).number);
+          }
+        });
+      });
+    }
+
+    // Document Statistics Panel & word count
+    function updateStatistics(text, compiler) {
+      const words = text.replace(/\\.*/g, '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).filter(w => w.length > 0).length;
+      const chars = text.length;
+      const lines = text.split('\n').length;
+      
+      document.getElementById('stat-words').innerText = words;
+      document.getElementById('stat-chars').innerText = chars;
+      document.getElementById('stat-lines').innerText = lines;
+      document.getElementById('stat-sections').innerText = compiler.outline.length;
+      document.getElementById('stat-equations').innerText = compiler.equationCount;
+      document.getElementById('stat-tables').innerText = compiler.tableCount;
+      document.getElementById('stat-figures').innerText = compiler.figureCount;
+      
+      document.getElementById('word-count-txt').innerText = `${words} words`;
+    }
+
+    function initStatsModal() {
+      const modal = document.getElementById('stats-overlay');
+      document.getElementById('stats-trigger').addEventListener('click', () => {
+        modal.classList.add('active');
+      });
+      document.getElementById('close-stats-btn').addEventListener('click', () => {
+        modal.classList.remove('active');
+      });
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('active');
+      });
+    }
+
+    // Document outline tree builder
+    function updateOutlinePanel(outline) {
+      const container = document.getElementById('outline-content');
+      container.innerHTML = '';
+      
+      if (outline.length === 0) {
+        container.innerHTML = '<div class="outline-item" style="color:var(--text-muted);cursor:default;">No sections defined</div>';
+        return;
+      }
+      
+      outline.forEach(item => {
+        const el = document.createElement('div');
+        const depth = item.type === 'section' ? 1 : item.type === 'subsection' ? 2 : 3;
+        el.className = `outline-item sec-${depth}`;
+        el.dataset.line = item.line;
+        el.innerText = `${item.number} ${item.title}`;
+        
+        el.addEventListener('click', () => {
+          highlightLine(item.line);
+        });
+        container.appendChild(el);
+      });
+    }
+
+    function highlightActiveOutlineSection(lineNum) {
+      let activeItem = null;
+      for (let item of compiledOutline) {
+        if (item.line <= lineNum) {
+          if (!activeItem || item.line > activeItem.line) {
+            activeItem = item;
+          }
+        }
+      }
+      
+      document.querySelectorAll('.outline-item').forEach(el => {
+        el.classList.remove('active');
+      });
+      
+      if (activeItem) {
+        const el = document.querySelector(`.outline-item[data-line="${activeItem.line}"]`);
+        if (el) {
+          el.classList.add('active');
+        }
+      }
+    }
+
+    // Compiler errors logger console panel
+    function updateErrorDiagnostics(errors) {
+      const consolePanel = document.getElementById('error-console');
+      const list = document.getElementById('error-console-list');
+      const badge = document.getElementById('error-count-badge');
+      const badgeTxt = document.getElementById('error-count-txt');
+      
+      list.innerHTML = '';
+      
+      const errorCount = errors.filter(e => e.severity === 'error').length;
+      if (errors.length > 0) {
+        badge.style.display = 'inline-block';
+        badgeTxt.innerText = `✖ ${errors.length} Diagnostics (${errorCount} Errors)`;
+        
+        errors.forEach(err => {
+          const item = document.createElement('div');
+          item.className = `error-item severity-${err.severity}`;
+          item.innerHTML = `
+            <span class="error-line-badge">Line ${err.line}</span>
+            <span class="error-msg-txt">${err.message}</span>
+          `;
+          
+          item.addEventListener('click', () => {
+            highlightLine(err.line);
+          });
+          list.appendChild(item);
+        });
+      } else {
+        badge.style.display = 'none';
+        consolePanel.classList.add('collapsed');
+      }
+      
+      // Dispatch CodeMirror diagnostics linter warnings
+      const diagnostics = errors.map(err => ({
+        from: err.from,
+        to: err.to,
+        severity: err.severity,
+        message: err.message
+      }));
+      editor.dispatch(setDiagnostics(editor.state, diagnostics));
+    }
+
+    function setDiagnostics(state, diagnostics) {
+      return {
+        effects: StateEffect.define().of(diagnostics)
+      };
+    }
+
+    function highlightLine(lineNum) {
+      if (lineNum < 1 || lineNum > editor.state.doc.lines) return;
+      const line = editor.state.doc.line(lineNum);
+      editor.dispatch({
+        selection: { anchor: line.from, head: line.from },
+        scrollIntoView: true,
+        effects: [highlightLineEffect.of(lineNum)]
+      });
+      
+      editor.focus();
+      
+      if (window.highlightTimeout) clearTimeout(window.highlightTimeout);
+      window.highlightTimeout = setTimeout(() => {
+        editor.dispatch({
+          effects: [clearHighlightEffect.of()]
+        });
+      }, 1500);
+    }
+
+    // status bar toast feedback
+    function showStatusToast(msg) {
+      const badge = document.getElementById('compile-status-badge');
+      const prev = badge.innerText;
+      badge.innerText = msg;
+      setTimeout(() => { badge.innerText = prev; }, 1500);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PAGE MINIMAP SLIDE SYNC
+    // ─────────────────────────────────────────────────────────────────
+    function updateMinimap() {
+      const minimap = document.getElementById('pdf-minimap');
+      minimap.innerHTML = '';
+      
+      const pages = document.querySelectorAll('.pdf-page');
+      pages.forEach((page, idx) => {
+        const pageNum = idx + 1;
+        const thumb = document.createElement('div');
+        thumb.className = 'minimap-page';
+        thumb.dataset.page = pageNum;
+        thumb.innerHTML = `<span class="minimap-page-number">${pageNum}</span>`;
+        
+        thumb.addEventListener('click', () => {
+          page.scrollIntoView({ behavior: 'smooth' });
+        });
+        minimap.appendChild(thumb);
+      });
+      syncMinimapHighlight();
+    }
+
+    function syncMinimapHighlight() {
+      const pages = document.querySelectorAll('.pdf-page');
+      const pane = document.getElementById('pdf-viewer-pane');
+      if (pages.length === 0) return;
+      
+      let activeNum = 1;
+      let minDiff = Infinity;
+      const paneCenter = pane.getBoundingClientRect().top + pane.clientHeight / 2;
+      
+      pages.forEach(page => {
+        const rect = page.getBoundingClientRect();
+        const pageCenter = rect.top + rect.height / 2;
+        const diff = Math.abs(pageCenter - paneCenter);
+        if (diff < minDiff) {
+          minDiff = diff;
+          activeNum = parseInt(page.dataset.page);
+        }
+      });
+      
+      document.querySelectorAll('.minimap-page').forEach(thumb => {
+        if (parseInt(thumb.dataset.page) === activeNum) {
+          thumb.classList.add('active');
+        } else {
+          thumb.classList.remove('active');
+        }
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // FORWARD SYNC: CODE EDITOR → PDF SCROLL
+    // ─────────────────────────────────────────────────────────────────
+    function syncCodeToPdf(lineNum) {
+      let bestBlock = null;
+      for (let block of compiledBlocks) {
+        if (block.line <= lineNum) {
+          if (!bestBlock || block.line > bestBlock.line) {
+            bestBlock = block;
+          }
+        }
+      }
+      
+      if (bestBlock && bestBlock !== lastActiveBlock) {
+        lastActiveBlock = bestBlock;
+        const target = document.querySelector(`#pdf-pages-container [data-source-line="${bestBlock.line}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          target.classList.remove('pdf-highlight-flash');
+          void target.offsetWidth; 
+          target.classList.add('pdf-highlight-flash');
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // INVERSE SYNC: PDF VIEW → CODE EDITOR
+    // ─────────────────────────────────────────────────────────────────
+    function initPdfHoverEvents() {
+      const tooltip = document.getElementById('pdf-hover-tooltip');
+      const viewer = document.getElementById('pdf-viewer-pane');
+      
+      // Clear indicators when leaving the viewer pane
+      viewer.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+        editor.dispatch({ effects: [clearHoverLineEffect.of()] });
+      });
+
+      // Hover movement triggers
+      document.querySelectorAll('[data-source-line]').forEach(el => {
+        el.addEventListener('mousemove', (e) => {
+          e.stopPropagation();
+          const lineNum = parseInt(el.getAttribute('data-source-line'));
+          
+          // Tooltip position setup
+          tooltip.innerText = `Line ${lineNum}`;
+          tooltip.style.left = (e.clientX + 15) + 'px';
+          tooltip.style.top = (e.clientY + 15) + 'px';
+          tooltip.style.display = 'block';
+          
+          // Dispatch chevron indicator to CodeMirror
+          editor.dispatch({ effects: [setHoverLineEffect.of(lineNum)] });
+        });
+        
+        el.addEventListener('mouseleave', () => {
+          tooltip.style.display = 'none';
+          editor.dispatch({ effects: [clearHoverLineEffect.of()] });
+        });
+      });
+    }
+
+    function initPdfSyncEvents() {
+      const viewer = document.getElementById('pdf-viewer-pane');
+      
+      // Single Click sync
+      viewer.addEventListener('click', (e) => {
+        const textSpan = e.target.closest('[data-source-line]');
+        if (textSpan && !textSpan.isContentEditable) {
+          const lineNum = parseInt(textSpan.getAttribute('data-source-line'));
+          highlightLine(lineNum);
+          
+          // PDF Side Border Flash
+          textSpan.classList.add('pdf-click-active');
+          setTimeout(() => { textSpan.classList.remove('pdf-click-active'); }, 1500);
+        }
+      });
+      
+      // Double Click Edit
+      viewer.addEventListener('dblclick', (e) => {
+        const target = e.target.closest('[data-source-line]');
+        if (!target) return;
+        
+        // Exclude math blocks, figures, and tables
+        const isInsideMath = target.closest('.katex') || target.closest('.latex-equation-block');
+        const isHeading = target.closest('h2') || target.closest('h3') || target.closest('h4');
+        const isFloat = target.closest('.latex-table-container') || target.closest('.latex-figure');
+        
+        if (isInsideMath || isHeading || isFloat) return;
+        
+        e.preventDefault();
+        
+        const originalText = target.innerText;
+        target.contentEditable = "true";
+        target.focus();
+        target.classList.add('inline-editing');
+        
+        let cancelled = false;
+
+        const finishEdit = () => {
+          target.contentEditable = "false";
+          target.classList.remove('inline-editing');
+          
+          if (cancelled) {
+            target.innerText = originalText;
+            return;
+          }
+
+          const newText = target.innerText;
+          if (originalText !== newText) {
+            const lineNum = parseInt(target.getAttribute('data-source-line'));
+            replaceTextInSource(originalText, newText, lineNum);
+          }
+        };
+        
+        target.addEventListener('blur', finishEdit, { once: true });
+        
+        target.addEventListener('keydown', (evt) => {
+          if (evt.key === 'Enter') {
+            evt.preventDefault();
+            target.blur();
+          }
+          if (evt.key === 'Escape') {
+            cancelled = true;
+            evt.preventDefault();
+            target.blur();
+          }
+        });
+      });
+    }
+
+    function replaceTextInSource(oldText, newText, lineNum) {
+      const doc = editor.state.doc;
+      const numLines = doc.lines;
+      const radius = 5;
+      const start = Math.max(1, lineNum - radius);
+      const end = Math.min(numLines, lineNum + radius);
+      
+      const cleanStr = (s) => s.replace(/\s+/g, ' ').trim();
+      const cleanedOld = cleanStr(oldText);
+      if (!cleanedOld) return;
+
+      for (let offset = 0; offset <= radius; offset++) {
+        const linesToCheck = [];
+        if (lineNum - offset >= start) linesToCheck.push(lineNum - offset);
+        if (offset > 0 && lineNum + offset <= end) linesToCheck.push(lineNum + offset);
+        
+        for (let l of linesToCheck) {
+          const lineText = doc.line(l).text;
+          
+          // substring check
+          let idx = lineText.indexOf(oldText);
+          if (idx !== -1) {
+            const startPos = doc.line(l).from + idx;
+            editor.dispatch({
+              changes: { from: startPos, to: startPos + oldText.length, insert: newText }
+            });
+            showSourceUpdatedFlash(l);
+            compileLatex();
+            return;
+          }
+          
+          // fuzzy check
+          const cleanedLine = cleanStr(lineText);
+          if (cleanedLine.indexOf(cleanedOld) !== -1) {
+            const words = oldText.split(/\s+/).filter(w => w.length > 0);
+            if (words.length > 0) {
+              let firstWordIdx = lineText.indexOf(words[0]);
+              let lastWordIdx = lineText.lastIndexOf(words[words.length - 1]);
+              if (firstWordIdx !== -1 && lastWordIdx !== -1 && lastWordIdx >= firstWordIdx) {
+                const startPos = doc.line(l).from + firstWordIdx;
+                const endPos = doc.line(l).from + lastWordIdx + words[words.length - 1].length;
+                editor.dispatch({
+                  changes: { from: startPos, to: endPos, insert: newText }
+                });
+                showSourceUpdatedFlash(l);
+                compileLatex();
+                return;
+              }
+            }
+          }
+        }
+      }
+      
+      // Fallback global search
+      const fullText = doc.toString();
+      const idx = fullText.indexOf(oldText);
+      if (idx !== -1) {
+        editor.dispatch({
+          changes: { from: idx, to: idx + oldText.length, insert: newText }
+        });
+        showSourceUpdatedFlash(doc.lineAt(idx).number);
+        compileLatex();
+      }
+    }
+
+    function showSourceUpdatedFlash(lineNum) {
+      editor.dispatch({
+        effects: [greenFlashEffect.of(lineNum)]
+      });
+      showStatusToast("Source updated");
+      setTimeout(() => {
+        editor.dispatch({
+          effects: [clearGreenFlashEffect.of()]
+        });
+      }, 1500);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // SNIPPETS PALETTE DIALOG OVERLAY (Ctrl+K)
+    // ─────────────────────────────────────────────────────────────────
+    function initCommandPalette() {
+      const overlay = document.getElementById('palette-overlay');
+      const search = document.getElementById('palette-search');
+      const list = document.getElementById('palette-list');
+      let activeIndex = 0;
+      let filtered = [];
+
+      window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          showPalette();
+        }
+        if (e.key === 'Escape' && overlay.classList.contains('active')) {
+          hidePalette();
+        }
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) hidePalette();
+      });
+
+      search.addEventListener('input', () => {
+        renderListItems(search.value);
+      });
+
+      search.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIndex = (activeIndex + 1) % filtered.length;
+          updateSelected();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIndex = (activeIndex - 1 + filtered.length) % filtered.length;
+          updateSelected();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (filtered[activeIndex]) {
+            insertSnippetText(filtered[activeIndex].code);
+          }
+        }
+      });
+
+      function showPalette() {
+        overlay.classList.add('active');
+        search.value = '';
+        renderListItems('');
+        search.focus();
+      }
+
+      // Hide Command Palette
+      function hidePalette() {
+        overlay.classList.remove('active');
+        editor.focus();
+      }
+
+      function renderListItems(query) {
+        list.innerHTML = '';
+        filtered = SNIPPETS.filter(item => 
+          item.name.toLowerCase().includes(query.toLowerCase()) || 
+          item.desc.toLowerCase().includes(query.toLowerCase())
+        );
+        
+        activeIndex = 0;
+        
+        filtered.forEach((item, idx) => {
+          const el = document.createElement('div');
+          el.className = `palette-item ${idx === 0 ? 'selected' : ''}`;
+          el.dataset.idx = idx;
+          el.innerHTML = `
+            <div>
+              <div style="font-weight:600;">${item.name}</div>
+              <div style="font-size:0.75rem;opacity:0.8;">${item.desc}</div>
+            </div>
+            <div class="item-meta">${item.code.substring(0, 25)}${item.code.length > 25 ? '...' : ''}</div>
+          `;
+          
+          el.addEventListener('click', () => {
+            insertSnippetText(item.code);
+          });
+          list.appendChild(el);
+        });
+      }
+
+      function updateSelected() {
+        const items = list.querySelectorAll('.palette-item');
+        items.forEach(el => el.classList.remove('selected'));
+        const activeEl = list.querySelector(`[data-idx="${activeIndex}"]`);
+        if (activeEl) {
+          activeEl.classList.add('selected');
+          activeEl.scrollIntoView({ block: 'nearest' });
+        }
+      }
+
+      function insertSnippetText(code) {
+        const sel = editor.state.selection.main;
+        editor.dispatch({
+          changes: { from: sel.from, to: sel.to, insert: code },
+          selection: { anchor: sel.from + code.length }
+        });
+        hidePalette();
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // SEARCH & REPLACE PANEL LOGIC (Ctrl+F / Ctrl+H)
+    // ─────────────────────────────────────────────────────────────────
+    function initSearchReplace() {
+      const panel = document.getElementById('search-replace-panel');
+      const searchInput = document.getElementById('search-input');
+      const replaceInput = document.getElementById('replace-input');
+      const btnCase = document.getElementById('search-case');
+      const btnRegex = document.getElementById('search-regex');
+      
+      window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'f') {
+          e.preventDefault();
+          toggleSearchPanel(true);
+        }
+        if (e.ctrlKey && e.key === 'h') {
+          e.preventDefault();
+          toggleSearchPanel(true, true);
+        }
+      });
+
+      document.getElementById('close-search-btn').addEventListener('click', () => {
+        toggleSearchPanel(false);
+      });
+
+      searchInput.addEventListener('input', performSearch);
+      btnCase.addEventListener('change', performSearch);
+      btnRegex.addEventListener('change', performSearch);
+      
+      document.getElementById('search-next').addEventListener('click', () => {
+        if (searchMatches.length > 0) {
+          searchActiveIndex = (searchActiveIndex + 1) % searchMatches.length;
+          scrollToActiveMatch();
+          dispatchSearchHighlight();
+        }
+      });
+
+      document.getElementById('search-prev').addEventListener('click', () => {
+        if (searchMatches.length > 0) {
+          searchActiveIndex = (searchActiveIndex - 1 + searchMatches.length) % searchMatches.length;
+          scrollToActiveMatch();
+          dispatchSearchHighlight();
+        }
+      });
+
+      document.getElementById('replace-btn').addEventListener('click', replaceCurrent);
+      document.getElementById('replace-all-btn').addEventListener('click', replaceAll);
+    }
+
+    function toggleSearchPanel(show, focusReplace = false) {
+      const panel = document.getElementById('search-replace-panel');
+      if (show) {
+        panel.classList.remove('collapsed');
+        if (focusReplace) {
+          document.getElementById('replace-input').focus();
+        } else {
+          document.getElementById('search-input').focus();
+        }
+        performSearch();
+      } else {
+        panel.classList.add('collapsed');
+        searchMatches = [];
+        searchActiveIndex = -1;
+        editor.dispatch({ effects: [searchEffect.of({ matches: [], activeIndex: -1 })] });
+        editor.focus();
+      }
+    }
+
+    function performSearch() {
+      const query = document.getElementById('search-input').value;
+      if (!query) {
+        searchMatches = [];
+        searchActiveIndex = -1;
+        updateSearchUI();
+        editor.dispatch({ effects: [searchEffect.of({ matches: [], activeIndex: -1 })] });
+        return;
+      }
+      
+      const caseSensitive = document.getElementById('search-case').checked;
+      const isRegex = document.getElementById('search-regex').checked;
+      const docText = editor.state.doc.toString();
+      
+      searchMatches = [];
+      try {
+        if (isRegex) {
+          const flags = caseSensitive ? 'g' : 'gi';
+          const regex = new RegExp(query, flags);
+          let match;
+          while ((match = regex.exec(docText)) !== null) {
+            if (match[0].length === 0) break;
+            searchMatches.push({ from: match.index, to: match.index + match[0].length });
+          }
+        } else {
+          const searchStr = caseSensitive ? query : query.toLowerCase();
+          const targetText = caseSensitive ? docText : docText.toLowerCase();
+          let idx = targetText.indexOf(searchStr);
+          while (idx !== -1) {
+            searchMatches.push({ from: idx, to: idx + searchStr.length });
+            idx = targetText.indexOf(searchStr, idx + searchStr.length);
+          }
+        }
+      } catch (err) {}
+      
+      if (searchMatches.length > 0) {
+        if (searchActiveIndex === -1 || searchActiveIndex >= searchMatches.length) {
+          searchActiveIndex = 0;
+        }
+      } else {
+        searchActiveIndex = -1;
+      }
+      
+      updateSearchUI();
+      dispatchSearchHighlight();
+      scrollToActiveMatch();
+    }
+
+    function scrollToActiveMatch() {
+      if (searchActiveIndex !== -1 && searchMatches[searchActiveIndex]) {
+        const match = searchMatches[searchActiveIndex];
+        editor.dispatch({
+          selection: { anchor: match.from, head: match.to },
+          scrollIntoView: true
+        });
+      }
+    }
+
+    function dispatchSearchHighlight() {
+      editor.dispatch({
+        effects: [searchEffect.of({ matches: searchMatches, activeIndex: searchActiveIndex })]
+      });
+    }
+
+    function updateSearchUI() {
+      const countSpan = document.getElementById('search-count');
+      if (searchMatches.length > 0) {
+        countSpan.innerText = `${searchActiveIndex + 1} of ${searchMatches.length}`;
+      } else {
+        countSpan.innerText = '0 of 0';
+      }
+    }
+
+    function replaceCurrent() {
+      if (searchActiveIndex !== -1 && searchMatches[searchActiveIndex]) {
+        const match = searchMatches[searchActiveIndex];
+        const replacement = document.getElementById('replace-input').value;
+        editor.dispatch({
+          changes: { from: match.from, to: match.to, insert: replacement }
+        });
+        performSearch();
+      }
+    }
+
+    // Replace all matching terms in editor
+    function replaceAll() {
+      if (searchMatches.length === 0) return;
+      const replacement = document.getElementById('replace-input').value;
+      const changes = searchMatches.map(match => ({
+        from: match.from,
+        to: match.to,
+        insert: replacement
+      })).reverse();
+      
+      editor.dispatch({ changes });
+      performSearch();
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // CODEMIRROR 6 ENGINE INITIALIZATION
+    // ─────────────────────────────────────────────────────────────────
+    function initCodeMirror() {
+      const container = document.getElementById('editor-container');
+      const latexLanguage = StreamLanguage.define(stex);
+      
+      const themeConfig = EditorView.theme({
+        "&": { height: "100%" },
+        ".cm-scroller": { overflow: "auto" }
+      });
+      
+      const state = EditorState.create({
+        doc: SAMPLE_DOCUMENT,
+        extensions: [
+          themeConfig,
+          lineNumbers(),
+          highlightActiveLine(),
+          highlightActiveLineGutter(),
+          bracketMatching(),
+          foldGutter(),
+          keymap.of([
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...foldKeymap
+          ]),
+          history(),
+          latexLanguage,
+          
+          highlightField,
+          greenFlashField,
+          searchField,
+          hoverLineField,
+          hoverGutter,
+          
+          lintGutter(),
+          
+          // Selection updates trigger Forward Sync scrolling
+          EditorView.updateListener.of((update) => {
+            if (update.selectionSet) {
+              const pos = update.state.selection.main.head;
+              const line = update.state.doc.lineAt(pos);
+              
+              // Coordinates status update
+              const col = pos - line.from + 1;
+              document.getElementById('cursor-pos-txt').innerText = `Ln ${line.number}:Col ${col}`;
+              
+              // Highlight active section outline item
+              highlightActiveOutlineSection(line.number);
+              
+              // Trigger forward scroll
+              syncCodeToPdf(line.number);
+            }
+            
+            // keystroke auto-compiles debouncer
+            if (update.docChanged) {
+              docDirty = true;
+              const auto = document.getElementById('auto-compile-toggle').checked;
+              if (auto) {
+                if (compileTimeout) clearTimeout(compileTimeout);
+                compileTimeout = setTimeout(compileLatex, 500);
+              }
+            }
+          })
+        ]
+      });
+
+      editor = new EditorView({
+        state,
+        parent: container
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // MAIN APP INITIALIZATION
+    // ─────────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      initResizer();
+      initOutlineToggle();
+      initZoomControls();
+      initThemeToggle();
+      initFormatter();
+      initExporter();
+      initCommandPalette();
+      initSearchReplace();
+      initStatsModal();
+      
+      initCodeMirror();
+      initAutoSave();
+      
+      // Initial Compilation
+      compileLatex();
+      
+      // Attach click events
+      initPdfSyncEvents();
+      
+      // Bind compile click
+      document.getElementById('compile-btn').addEventListener('click', compileLatex);
+      
+      // Auto compile checkbox label state toggle
+      const autoToggle = document.getElementById('auto-compile-toggle');
+      const autoLabel = document.getElementById('auto-compile-label');
+      autoToggle.addEventListener('change', () => {
+        autoLabel.innerText = autoToggle.checked ? "Auto: ON" : "Auto: OFF";
+      });
+
+      // Bind global Ctrl+Enter to compile
+      window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+          e.preventDefault();
+          compileLatex();
+        }
+      });
+      
+      // Scroll listener to update minimap active page highlight
+      document.getElementById('pdf-viewer-pane').addEventListener('scroll', syncMinimapHighlight);
+      
+      // Collapsible diagnostics panels triggers
+      document.getElementById('error-count-badge').addEventListener('click', () => {
+        document.getElementById('error-console').classList.toggle('collapsed');
+      });
+      document.getElementById('close-console-btn').addEventListener('click', () => {
+        document.getElementById('error-console').classList.add('collapsed');
+      });
+    });
+  </script>
+</body>
+</html>
