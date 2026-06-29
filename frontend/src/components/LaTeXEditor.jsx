@@ -13,7 +13,8 @@ import {
   CheckIcon,
   ClipboardIcon,
   DownloadIcon,
-  RefreshIcon
+  RefreshIcon,
+  PdfIcon
 } from './Icons'
 
 // Snippets data for command palette
@@ -487,7 +488,7 @@ class LaTeXCompiler {
           let cmd = cmdMatch[1]
           let cmdLen = cmdMatch[0].length
           
-          if (['textbf', 'textit', 'underline', 'emph', 'ref', 'cite', 'footnote', 'texttt', 'hspace', 'vspace'].includes(cmd)) {
+          if (['textbf', 'textit', 'underline', 'emph', 'ref', 'cite', 'footnote', 'texttt', 'hspace', 'vspace', 'textsf'].includes(cmd)) {
             let argStart = pos + cmdLen
             while (argStart < text.length && text[argStart] !== '{') argStart++
             if (argStart < text.length) {
@@ -500,7 +501,7 @@ class LaTeXCompiler {
                   html += `<em>${this.renderInline(arg, lineNum)}</em>`
                 } else if (cmd === 'underline') {
                   html += `<span class="underline">${this.renderInline(arg, lineNum)}</span>`
-                } else if (cmd === 'texttt') {
+                } else if (cmd === 'texttt' || cmd === 'textsf') {
                   html += `<code class="tex-monospace">${this.renderInline(arg, lineNum)}</code>`
                 } else if (cmd === 'hspace') {
                   html += `<span style="display: inline-block; width: ${this.convertLaTeXLength(arg)};"></span>`
@@ -546,11 +547,33 @@ class LaTeXCompiler {
             html += `<br/>`
             pos += cmdLen
             continue
+          } else if (['LARGE', 'Large', 'large', 'centering', 'noindent', 'hline'].includes(cmd)) {
+            pos += cmdLen
+            continue
           } else {
             html += `\\${cmd}`
             pos += cmdLen
             continue
           }
+          
+          // Fallback if parsing braces failed in any block above
+          html += `\\${cmd}`
+          pos += cmdLen
+          continue
+        } else {
+          // It's a slash but not followed by letters (e.g. \&, \%, \_)
+          let escapedChar = text[pos + 1]
+          if (escapedChar) {
+            if (escapedChar === '&') html += '&amp;'
+            else if (escapedChar === '<') html += '&lt;'
+            else if (escapedChar === '>') html += '&gt;'
+            else html += escapedChar
+            pos += 2
+          } else {
+            html += '\\'
+            pos += 1
+          }
+          continue
         }
       }
       
@@ -706,6 +729,14 @@ class LaTeXCompiler {
       el.appendChild(numEl)
     }
     return el
+  }
+
+  renderEnvironment(block) {
+    if (block.envName === 'tikzpicture') return this.renderTikzpicture(block)
+    if (block.envName === 'itemize') return this.renderList(block)
+    if (block.envName === 'enumerate') return this.renderList(block)
+    if (block.envName === 'description') return this.renderDescriptionList(block)
+    return null
   }
 
   renderList(block) {
@@ -943,6 +974,108 @@ class LaTeXCompiler {
     return el
   }
 
+  renderTikzpicture(block) {
+    const el = document.createElement('div')
+    el.className = 'latex-tikzpicture'
+    el.dataset.sourceLine = block.line
+    el.style.position = 'relative'
+    el.style.width = '100%'
+    el.style.height = '100%' // Usually takes full page height
+    el.style.overflow = 'visible'
+
+    // Parse \node[opts] at (x,y) {content};
+    const nodeRegex = /\\node\[(.*?)\]\s*at\s*\(([^,]+),([^)]+)\)\s*\{([\s\S]*?)\};/g
+    let match
+    
+    // Scale factor since LaTeX bp (big points) are 1/72 inch, same as CSS pt or px depending on DPI
+    // But PyMuPDF coordinates might need a generic scaling. We'll use absolute px.
+    const scale = 1.0 
+
+    while ((match = nodeRegex.exec(block.content)) !== null) {
+      const optsStr = match[1]
+      const x = parseFloat(match[2])
+      const y = parseFloat(match[3])
+      const content = match[4]
+      
+      // Calculate approximate line number of this node within the block content
+      const contentBefore = block.content.substring(0, match.index)
+      const localLine = contentBefore.split('\\n').length - 1
+      const actualLineNum = block.line + localLine + 1 // +1 for \begin{tikzpicture} line
+
+      const nodeDiv = document.createElement('div')
+      nodeDiv.className = 'tikz-node'
+      nodeDiv.dataset.sourceLine = actualLineNum
+      nodeDiv.style.position = 'absolute'
+      nodeDiv.style.left = `${x * scale}px`
+      nodeDiv.style.top = `${y * scale}px`
+      
+      // Parse options like text width
+      if (optsStr.includes('text width=')) {
+        const widthMatch = optsStr.match(/text width=([\d.]+)bp/)
+        if (widthMatch) {
+          nodeDiv.style.width = `${parseFloat(widthMatch[1]) * scale}px`
+        }
+      }
+
+      // Check if it's an image
+      if (content.startsWith('\\includegraphics')) {
+        const imgMatch = content.match(/\\includegraphics\[(.*?)\]\{(.*?)\}/)
+        if (imgMatch) {
+          const imgOpts = imgMatch[1]
+          const imgSrc = imgMatch[2]
+          
+          let w = 'auto', h = 'auto'
+          if (imgOpts.includes('width=')) w = imgOpts.match(/width=([\d.]+)bp/)?.[1] + 'px'
+          if (imgOpts.includes('height=')) h = imgOpts.match(/height=([\d.]+)bp/)?.[1] + 'px'
+          
+          nodeDiv.innerHTML = `<img src="/api/outputs/images/${imgSrc.split('/').pop()}" style="width:${w}; height:${h};" alt="extracted image" />`
+        }
+      } else {
+        // Text node
+        nodeDiv.contentEditable = "true"
+        nodeDiv.style.cursor = "text"
+        nodeDiv.style.outline = "none"
+        
+        let innerText = content.trim()
+        
+        // Strip outer braces if present (e.g., from fallback spans)
+        if (innerText.startsWith('{') && innerText.endsWith('}')) {
+          innerText = innerText.substring(1, innerText.length - 1).trim()
+        }
+
+        // Find the FIRST color to apply to the div
+        const tcMatch = innerText.match(/\\textcolor\[HTML\]\{([A-Fa-f0-9]+)\}/)
+        if (tcMatch) {
+          nodeDiv.style.color = '#' + tcMatch[1]
+        }
+        
+        // Find the FIRST font size to apply to the div
+        const fsMatch = innerText.match(/\\fontsize\{([\d.]+)bp\}\{[\d.]+bp\}\\selectfont/)
+        if (fsMatch) {
+          nodeDiv.style.fontSize = fsMatch[1] + 'px'
+          nodeDiv.style.lineHeight = (parseFloat(fsMatch[1]) * 1.2) + 'px'
+        }
+
+        // Now STRIP ALL raw latex font formatting from innerText so it doesn't clutter the view!
+        innerText = innerText.replace(/\\textcolor\[HTML\]\{[A-Fa-f0-9]+\}\s*\{/g, '')
+        innerText = innerText.replace(/\\fontsize\{[\d.]+bp\}\{[\d.]+bp\}\\selectfont\s*/g, '')
+        
+        // Clean up dangling braces that were left behind by stripping the opening \textcolor{
+        innerText = innerText.replace(/^\{+/, '').replace(/\}+$/, '').trim()
+        
+        // Also remove braces from \textbf{} etc if any (optional, but renderInline handles it partially)
+        nodeDiv.innerHTML = this.renderInline(innerText, actualLineNum)
+        
+        // Add special class to bind events later
+        nodeDiv.classList.add('tikz-editable-text')
+      }
+
+      el.appendChild(nodeDiv)
+    }
+
+    return el
+  }
+
   compile() {
     this.preScan()
     const blocks = this.parseBlocks()
@@ -966,7 +1099,9 @@ class LaTeXCompiler {
       } else if (block.type === 'broken_env') {
         node = this.renderBrokenEnv(block)
       } else if (block.type === 'environment') {
-        if (['itemize', 'enumerate', 'description'].includes(block.envName)) {
+        if (block.envName === 'tikzpicture') {
+          node = this.renderTikzpicture(block)
+        } else if (['itemize', 'enumerate', 'description'].includes(block.envName)) {
           node = this.renderList(block)
         } else if (block.envName === 'equation' || block.envName === 'align') {
           node = this.renderEquation(block)
@@ -1076,7 +1211,7 @@ class LaTeXCompiler {
       })
     }
     
-    const emptyArgRegex = /\\(section|subsection|subsubsection|textbf|textit|underline|emph|textcolor|ref|cite|footnote)\s*\{\s*\}/g
+    const emptyArgRegex = /\\(section|subsection|subsubsection|ref|cite|footnote)\s*\{\s*\}/g
     while ((match = emptyArgRegex.exec(cleanText)) !== null) {
       errors.push({
         line: this.getLineNum(match.index),
@@ -1229,8 +1364,14 @@ const hoverGutter = gutter({
 // ─────────────────────────────────────────────────────────────────
 // MAIN LIVE EDITOR COMPONENT
 // ─────────────────────────────────────────────────────────────────
-export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
-  const [zoom, setZoom] = useState(() => parseInt(localStorage.getItem('latex-editor-zoom') || '100'))
+export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveToBackend, loadFromBackend, compileAndDownloadPdf, compileAndDownloadDocx }) {
+  const [zoom, setZoom] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem('latex-editor-zoom') || '100')
+    } catch (e) {
+      return 100
+    }
+  })
   const [autoCompile, setAutoCompile] = useState(true)
   const [isOutlineCollapsed, setIsOutlineCollapsed] = useState(false)
   const [outline, setOutline] = useState([])
@@ -1256,11 +1397,19 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
   const [compileStatus, setCompileStatus] = useState('Ready')
   const [compileTime, setCompileTime] = useState('')
   const [isConsoleCollapsed, setIsConsoleCollapsed] = useState(true)
+  const [downloadError, setDownloadError] = useState('')
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null)
+  const [isBackendCompiling, setIsBackendCompiling] = useState(false)
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
   const [activeOutlineLine, setActiveOutlineLine] = useState(1)
-  const [minimapPages, setMinimapPages] = useState([1])
-  const [activeMinimapPage, setActiveMinimapPage] = useState(1)
+
   const [savedIndicatorVisible, setSavedIndicatorVisible] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('') // '', 'saving', 'saved', 'error'
+  const [lastSavedAt, setLastSavedAt] = useState('')
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState(false)
+  const [compiledPageCount, setCompiledPageCount] = useState(0)
+  const [compileTimestamp, setCompileTimestamp] = useState(Date.now())
 
   // DOM Refs
   const editorContainerRef = useRef(null)
@@ -1276,6 +1425,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
   const compiledBlocksRef = useRef([])
   const lastActiveBlockRef = useRef(null)
   const documentDirtyRef = useRef(false)
+  const backendSyncTimerRef = useRef(null)
 
   // 1. Initialize CodeMirror
   useEffect(() => {
@@ -1366,18 +1516,82 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
     }
   }, [zoom])
 
-  // Save session to localStorage
+  // The 2s localStorage sync was removed in favor of backend database sync
+
+  // Backend sync (every 30s)
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (documentDirtyRef.current && editorViewRef.current) {
-        localStorage.setItem('latex-editor-source', editorViewRef.current.state.doc.toString())
-        documentDirtyRef.current = false
-        setSavedIndicatorVisible(true)
-        setTimeout(() => setSavedIndicatorVisible(false), 1000)
+    if (!jobId || !saveToBackend) return
+    backendSyncTimerRef.current = setInterval(async () => {
+      if (editorViewRef.current) {
+        const source = editorViewRef.current.state.doc.toString()
+        const pos = editorViewRef.current.state.selection.main.head
+        const line = editorViewRef.current.state.doc.lineAt(pos)
+        const scrollPos = pdfViewerPaneRef.current?.scrollTop || 0
+        setSaveStatus('saving')
+        const success = await saveToBackend(jobId, source, line.number, pos - line.from + 1, scrollPos)
+        if (success) {
+          setSaveStatus('saved')
+          setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+        } else {
+          setSaveStatus('error')
+        }
+        setTimeout(() => setSaveStatus(''), 2000)
       }
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [])
+    }, 10000)
+    return () => {
+      if (backendSyncTimerRef.current) clearInterval(backendSyncTimerRef.current)
+    }
+  }, [jobId, saveToBackend])
+
+  // Explicit save handler
+  const handleExplicitSave = useCallback(async () => {
+    if (!editorViewRef.current || !jobId || !saveToBackend) return
+    const source = editorViewRef.current.state.doc.toString()
+    const pos = editorViewRef.current.state.selection.main.head
+    const line = editorViewRef.current.state.doc.lineAt(pos)
+    const scrollPos = pdfViewerPaneRef.current?.scrollTop || 0
+    setSaveStatus('saving')
+    const success = await saveToBackend(jobId, source, line.number, pos - line.from + 1, scrollPos)
+    if (success) {
+      setSaveStatus('saved')
+      setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+    } else {
+      setSaveStatus('error')
+    }
+    setTimeout(() => setSaveStatus(''), 2000)
+  }, [jobId, saveToBackend])
+
+  // Download as PDF handler
+  const handleDownloadPdf = useCallback(async () => {
+    if (!editorViewRef.current || !jobId || !compileAndDownloadPdf) return
+    setIsDownloadingPdf(true)
+    setDownloadError('')
+    try {
+      const source = editorViewRef.current.state.doc.toString()
+      const success = await compileAndDownloadPdf(jobId, source)
+      if (!success) setDownloadError('PDF compilation failed')
+    } catch (e) {
+      setDownloadError(e.message || 'PDF download failed')
+    } finally {
+      setIsDownloadingPdf(false)
+    }
+  }, [jobId, compileAndDownloadPdf])
+
+  // Download as DOCX handler
+  const handleDownloadDocx = useCallback(async () => {
+    if (!editorViewRef.current || !jobId || !compileAndDownloadDocx) return
+    setIsDownloadingDocx(true)
+    setDownloadError('')
+    try {
+      const source = editorViewRef.current.state.doc.toString()
+      const success = await compileAndDownloadDocx(jobId, source)
+      if (!success) setDownloadError('DOCX conversion failed')
+    } catch (e) {
+      setDownloadError(e.message || 'DOCX download failed')
+    } finally {
+      setIsDownloadingDocx(false)
+    }
+  }, [jobId, compileAndDownloadDocx])
 
   // Helper: jump/highlight in editor
   const highlightLine = useCallback((lineNum) => {
@@ -1401,7 +1615,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
 
   // Compilation & Pagination Engine
   const compileLatex = useCallback(() => {
-    if (!editorViewRef.current || !pdfPagesContainerRef.current) return
+    if (!editorViewRef.current) return
     
     setCompileStatus('Compiling')
     const text = editorViewRef.current.state.doc.toString()
@@ -1409,60 +1623,102 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
     // Proximity Scroll Preservation: Save reading position
     const savedPos = getTopmostVisibleSourceLine()
 
-    // Compiler Run
-    const compiler = new LaTeXCompiler(text, (line) => highlightLine(line))
-    const res = compiler.compile()
-    
-    compiledBlocksRef.current = compiler.parseBlocks()
-    setOutline(res.outline)
-    setErrors(res.errors)
+    try {
+      // Compiler Run
+      const compiler = new LaTeXCompiler(text, (line) => highlightLine(line))
+      const res = compiler.compile()
+      
+      compiledBlocksRef.current = compiler.parseBlocks()
+      setOutline(res.outline)
+      setErrors(res.errors)
 
-    // Statistics Calculation
-    const words = text.replace(/\\.*/g, '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).filter(w => w.length > 0).length
-    setStats({
-      words,
-      chars: text.length,
-      lines: text.split('\n').length,
-      sections: res.outline.length,
-      equations: compiler.equationCount,
-      tables: compiler.tableCount,
-      figures: compiler.figureCount
-    })
+      // Statistics Calculation
+      const words = text.replace(/\\.*/g, '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).filter(w => w.length > 0).length
+      setStats({
+        words,
+        chars: text.length,
+        lines: text.split('\n').length,
+        sections: res.outline.length,
+        equations: compiler.equationCount,
+        tables: compiler.tableCount,
+        figures: compiler.figureCount
+      })
 
-    // Paginate simulated preview pages
-    paginateDocument(res.elements, res.footnotes)
+      // Remove renderDocument call. Instead, we use the PDF imagery from backend
 
-    // Restore Reading Position
-    restoreReadingPosition(savedPos)
+      // Restore Reading Position
+      restoreReadingPosition(savedPos)
 
-    // Update minimap page count
-    const pagesCount = pdfPagesContainerRef.current.querySelectorAll('.pdf-page').length
-    const pageArr = Array.from({ length: pagesCount }, (_, i) => i + 1)
-    setMinimapPages(pageArr.length > 0 ? pageArr : [1])
+      // Update status indicators
+      const errorCount = res.errors.filter(e => e.severity === 'error').length
+      if (res.errors.length > 0) {
+        setCompileStatus(errorCount > 0 ? 'Error' : 'Warning')
+      } else {
+        setCompileStatus('Ready')
+      }
+      
+      const now = new Date()
+      setCompileTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
 
-    // Update status indicators
-    const errorCount = res.errors.filter(e => e.severity === 'error').length
-    if (res.errors.length > 0) {
-      setCompileStatus(errorCount > 0 ? 'Error' : 'Warning')
-    } else {
-      setCompileStatus('Ready')
+      // Trigger backend compilation for Live PDF Viewer
+      if (jobId) {
+        setIsBackendCompiling(true)
+        fetch(`/api/export/compile-pdf/${jobId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latex_code: text })
+        })
+        .then(response => {
+          if (!response.ok) throw new Error('Backend compilation failed')
+          return response.blob()
+        })
+        .then(blob => {
+          setPdfPreviewUrl(prev => {
+            if (prev) URL.revokeObjectURL(prev)
+            return URL.createObjectURL(blob)
+          })
+          // Also fetch the updated page count to render imagery
+          return fetch(`/api/export/preview-compiled/count/${jobId}`)
+        })
+        .then(res => {
+          if (res) return res.json()
+        })
+        .then(data => {
+          if (data) {
+            setCompiledPageCount(data.count)
+            setCompileTimestamp(Date.now())
+          }
+          setIsBackendCompiling(false)
+        })
+        .catch(err => {
+          console.error('Backend compilation failed, trying fallback images:', err)
+          // Fallback: still try to fetch page count so we can show original PDF images
+          fetch(`/api/export/preview-compiled/count/${jobId}`)
+            .then(res => res.json())
+            .then(data => {
+              setCompiledPageCount(data.count)
+              setCompileTimestamp(Date.now())
+              setIsBackendCompiling(false)
+            })
+            .catch(() => setIsBackendCompiling(false))
+        })
+      }
+    } catch (error) {
+      console.error('LaTeX compilation failed:', error)
+      setCompileStatus('Error')
+      setErrors([{ line: 1, from: 0, to: 0, message: (error.stack || error.message || 'Fatal compilation error').substring(0, 200), severity: 'error' }])
+      
+      const now = new Date()
+      setCompileTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     }
-    
-    const now = new Date()
-    setCompileTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
-
-    // Attach sync & editing mouse events to compiled elements
-    setTimeout(() => {
-      attachPdfEvents()
-    }, 100)
-  }, [highlightLine])
+  }, [highlightLine, jobId])
 
   // Trigger compilation when code changes (debounced if auto-compile is ON)
   useEffect(() => {
     if (!autoCompile) return
     const timer = setTimeout(() => {
       compileLatex()
-    }, 500)
+    }, 800)
     return () => clearTimeout(timer)
   }, [code, autoCompile, compileLatex])
 
@@ -1473,6 +1729,8 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
     }, 200)
     return () => clearTimeout(timer)
   }, [compileLatex])
+
+
 
   // Drag Resizer logic
   useEffect(() => {
@@ -1516,28 +1774,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
     }
   }, [])
 
-  // Sync scroll minimap page highlight
-  const handlePdfScroll = () => {
-    const pages = pdfPagesContainerRef.current?.querySelectorAll('.pdf-page')
-    const pane = pdfViewerPaneRef.current
-    if (!pages || pages.length === 0 || !pane) return
-    
-    let activeNum = 1
-    let minDiff = Infinity
-    const paneCenter = pane.getBoundingClientRect().top + pane.clientHeight / 2
-    
-    pages.forEach(page => {
-      const rect = page.getBoundingClientRect()
-      const pageCenter = rect.top + rect.height / 2
-      const diff = Math.abs(pageCenter - paneCenter)
-      if (diff < minDiff) {
-        minDiff = diff
-        activeNum = parseInt(page.dataset.page)
-      }
-    })
-    
-    setActiveMinimapPage(activeNum)
-  }
+
 
   // Formatting Code logic
   const handleFormat = () => {
@@ -1602,90 +1839,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
     }, 1500)
   }
 
-  // Exporters
-  const handleExportHTML = () => {
-    const pagesHtml = pdfPagesContainerRef.current?.innerHTML || ''
-    
-    const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Exported Document - LaTeX Studio</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css">
-  <style>
-    body {
-      background-color: #f0f2fa;
-      margin: 0;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      font-family: 'Computer Modern Serif', Georgia, serif;
-    }
-    .pdf-page {
-      width: 210mm;
-      height: 297mm;
-      min-height: 297mm;
-      padding: 2.5cm;
-      background-color: #ffffff;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
-      margin: 20px auto;
-      position: relative;
-      box-sizing: border-box;
-      color: #000000;
-      font-size: 11pt;
-      line-height: 1.5;
-      text-align: justify;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      overflow: hidden;
-    }
-    .page-content { flex: 1; width: 100%; overflow: hidden; }
-    .page-footer { height: 24px; display: flex; align-items: flex-end; justify-content: center; font-size: 10pt; color: #555555; }
-    .page-footnotes { margin-top: 12px; padding-top: 8px; border-top: 0.5px solid #000000; font-size: 9pt; color: #333333; }
-    .footnote-item { margin-bottom: 4px; }
-    .latex-title-block { text-align: center; margin-bottom: 24px; }
-    .latex-title { font-size: 17pt; font-weight: bold; margin-bottom: 12px; }
-    .latex-author { font-size: 11pt; margin-bottom: 6px; }
-    .latex-date { font-size: 11pt; margin-bottom: 18px; }
-    .latex-abstract { margin: 18px 24px; font-size: 9.5pt; }
-    .latex-abstract-heading { text-align: center; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; font-size: 9pt; }
-    .latex-section { font-size: 13pt; font-weight: bold; margin-top: 18px; margin-bottom: 8px; }
-    .latex-subsection { font-size: 11pt; font-weight: bold; margin-top: 14px; margin-bottom: 6px; }
-    .latex-subsubsection { font-size: 10pt; font-weight: bold; font-style: italic; margin-top: 12px; margin-bottom: 4px; }
-    .latex-paragraph { margin-bottom: 10px; text-indent: 1.5em; }
-    .latex-section + .latex-paragraph { text-indent: 0; }
-    .underline { text-decoration: underline; }
-    .tex-monospace { font-family: monospace; background-color: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }
-    .latex-equation-block { display: flex; align-items: center; justify-content: space-between; margin: 14px 0; }
-    .latex-equation-math { flex: 1; display: flex; justify-content: center; }
-    .latex-itemize, .latex-enumerate { margin: 10px 0 10px 24px; }
-    .latex-table-container { display: flex; flex-direction: column; align-items: center; margin: 16px 0; }
-    .latex-table { border-collapse: collapse; margin: 0 auto; font-size: 10pt; }
-    .latex-table td { padding: 6px 12px; }
-    .latex-table tr.border-top td { border-top: 1px solid #000000; }
-    .latex-table tr:last-child td { border-bottom: 1px solid #000000; }
-  </style>
-</head>
-<body>
-  <div id="pdf-pages-container">
-    ${pagesHtml}
-  </div>
-</body>
-</html>`
 
-    const blob = new Blob([fullHtml], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'compiled_document.html'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
 
   const handleExportTex = () => {
     const editor = editorViewRef.current
@@ -1717,96 +1871,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
     view.dispatch(setDiagnostics(view.state, diagnostics))
   }, [errors])
 
-  // PDF Page Paginator
-  const paginateDocument = (elements, footnotes) => {
-    const container = pdfPagesContainerRef.current
-    if (!container) return
-    container.innerHTML = ''
-    
-    const createNewPageNode = (pageNum) => {
-      const page = document.createElement('div')
-      page.className = 'pdf-page'
-      page.dataset.page = pageNum
-      
-      const content = document.createElement('div')
-      content.className = 'page-content'
-      page.appendChild(content)
-      
-      const footnotesDiv = document.createElement('div')
-      footnotesDiv.className = 'page-footnotes'
-      footnotesDiv.style.display = 'none'
-      page.appendChild(footnotesDiv)
-      
-      const footer = document.createElement('div')
-      footer.className = 'page-footer'
-      footer.innerText = pageNum
-      page.appendChild(footer)
-      
-      return page
-    }
 
-    let pageNum = 1
-    let currentPage = createNewPageNode(pageNum)
-    container.appendChild(currentPage)
-    
-    let contentDiv = currentPage.querySelector('.page-content')
-    let footnotesDiv = currentPage.querySelector('.page-footnotes')
-    
-    const pageHeight = 1123 
-    const maxContentHeight = pageHeight - 188
-    
-    for (let el of elements) {
-      contentDiv.appendChild(el)
-      
-      const fnRefs = el.querySelectorAll('.pdf-footnote-ref')
-      const tempFns = []
-      fnRefs.forEach(ref => {
-        const idx = parseInt(ref.dataset.fnIdx)
-        const fnData = footnotes.find(f => f.id === idx)
-        if (fnData) tempFns.push(fnData)
-      })
-      
-      if (tempFns.length > 0) {
-        footnotesDiv.style.display = 'block'
-        tempFns.forEach(fn => {
-          const fnEl = document.createElement('div')
-          fnEl.className = 'footnote-item'
-          fnEl.innerHTML = `<sup>${fn.id}</sup> ${fn.content}`
-          footnotesDiv.appendChild(fnEl)
-        })
-      }
-      
-      const totalHeight = contentDiv.scrollHeight + (footnotesDiv.style.display === 'block' ? footnotesDiv.scrollHeight : 0)
-      if (totalHeight > maxContentHeight && contentDiv.children.length > 1) {
-        contentDiv.removeChild(el)
-        if (tempFns.length > 0) {
-          for (let k = 0; k < tempFns.length; k++) {
-            footnotesDiv.removeChild(footnotesDiv.lastChild)
-          }
-          if (footnotesDiv.children.length === 0) {
-            footnotesDiv.style.display = 'none'
-          }
-        }
-        
-        pageNum++
-        currentPage = createNewPageNode(pageNum)
-        container.appendChild(currentPage)
-        contentDiv = currentPage.querySelector('.page-content')
-        footnotesDiv = currentPage.querySelector('.page-footnotes')
-        
-        contentDiv.appendChild(el)
-        if (tempFns.length > 0) {
-          footnotesDiv.style.display = 'block'
-          tempFns.forEach(fn => {
-            const fnEl = document.createElement('div')
-            fnEl.className = 'footnote-item'
-            fnEl.innerHTML = `<sup>${fn.id}</sup> ${fn.content}`
-            footnotesDiv.appendChild(fnEl)
-          })
-        }
-      }
-    }
-  }
 
   // Scroll Helpers
   const getTopmostVisibleSourceLine = () => {
@@ -2271,12 +2336,44 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
         </div>
 
         <div className="live-editor-toolbar-right">
+          <button className="le-btn le-btn-save" onClick={handleExplicitSave} title="Save document (Ctrl+S)" disabled={!jobId}>
+            {saveStatus === 'saving' ? (
+              <><span className="btn-spinner"></span> Saving...</>
+            ) : saveStatus === 'saved' ? (
+              <><CheckIcon size={14} /> Saved</>
+            ) : (
+              <><DownloadIcon size={14} /> Save</>
+            )}
+          </button>
+          <button 
+            className="le-btn le-btn-pdf" 
+            onClick={handleDownloadPdf} 
+            title="Compile & download PDF" 
+            disabled={isDownloadingPdf || !jobId}
+          >
+            {isDownloadingPdf ? (
+              <><span className="btn-spinner"></span> Compiling...</>
+            ) : (
+              <><PdfIcon size={14} /> Download PDF</>
+            )}
+          </button>
+          <button 
+            className="le-btn le-btn-docx" 
+            onClick={handleDownloadDocx} 
+            title="Convert & download Word (.docx)" 
+            disabled={isDownloadingDocx || !jobId}
+          >
+            {isDownloadingDocx ? (
+              <><span className="btn-spinner"></span> Converting...</>
+            ) : (
+              <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Download DOCX</>
+            )}
+          </button>
+          <div className="le-toolbar-separator"></div>
           <button className="le-btn le-btn-secondary" onClick={handleFormat} title="Format LaTeX Code">
             Format Code
           </button>
-          <button className="le-btn le-btn-secondary" onClick={handleExportHTML} title="Export compiled HTML page">
-            Export HTML
-          </button>
+
           <button className="le-btn le-btn-secondary" onClick={handleExportTex} title="Download LaTeX source">
             <DownloadIcon size={14} /> Export .tex
           </button>
@@ -2382,30 +2479,73 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
         {/* Vertical draggable divider */}
         <div ref={dividerRef} className="pane-divider"></div>
 
-        {/* Page thumbnails Minimap */}
-        <div className="pdf-minimap">
-          {minimapPages.map(pageNum => (
-            <div 
-              key={pageNum}
-              className={`minimap-page ${activeMinimapPage === pageNum ? 'active' : ''}`}
-              onClick={() => {
-                const target = pdfPagesContainerRef.current?.querySelector(`.pdf-page[data-page="${pageNum}"]`)
-                target?.scrollIntoView({ behavior: 'smooth' })
-              }}
-            >
-              <span className="minimap-page-number">{pageNum}</span>
-            </div>
-          ))}
-        </div>
+
 
         {/* Live Preview Pane (Right Side) */}
-        <div ref={pdfViewerPaneRef} className="preview-pane" onScroll={handlePdfScroll}>
-          <div ref={pdfZoomWrapperRef} className="pdf-zoom-wrapper">
-            <div ref={pdfPagesContainerRef}></div>
+        <div ref={pdfViewerPaneRef} className="preview-pane">
+          
+          <div ref={pdfZoomWrapperRef} className="pdf-zoom-wrapper" style={{ paddingTop: '20px', paddingBottom: '40px' }}>
+            <div className="doc-canvas" style={{ padding: 0, backgroundColor: 'transparent', boxShadow: 'none' }}>
+              {compiledPageCount > 0 ? (
+                Array.from({ length: compiledPageCount }).map((_, i) => (
+                  <img
+                    key={i}
+                    src={`/api/export/preview-compiled/${jobId}/${i}?t=${compileTimestamp}`}
+                    alt={`Page ${i + 1}`}
+                    style={{ 
+                      width: '100%', 
+                      display: 'block', 
+                      marginBottom: '24px', 
+                      boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
+                      borderRadius: '4px',
+                      backgroundColor: '#ffffff' 
+                    }}
+                  />
+                ))
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: 'var(--text-muted)' }}>
+                  {isBackendCompiling ? (
+                    <><span className="btn-spinner" style={{ borderTopColor: 'var(--accent-light)', width: '32px', height: '32px', marginBottom: '1rem', borderWidth: '3px' }}></span> Compiling pixel-perfect PDF...</>
+                  ) : compileStatus === 'Error' ? (
+                    <><FailedIcon size={48} style={{ color: 'var(--error)' }} /> <div style={{ marginTop: '1rem', color: 'var(--error)' }}>Compilation failed. Please check diagnostics below.</div></>
+                  ) : (
+                    <><PdfIcon size={48} /> <div style={{ marginTop: '1rem' }}>Generating preview...</div></>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
+          
+          {isBackendCompiling && compiledPageCount > 0 && (
+             <div style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 100 }}>
+                <span className="btn-spinner" style={{ width: '14px', height: '14px' }}></span> Compiling...
+             </div>
+          )}
         </div>
 
       </main>
+
+      {/* Download error toast */}
+      {downloadError && (
+        <div style={{
+          position: 'fixed',
+          bottom: '40px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '0.75rem 1.5rem',
+          background: 'rgba(225, 112, 85, 0.95)',
+          color: '#fff',
+          borderRadius: '8px',
+          fontSize: '0.85rem',
+          fontWeight: 500,
+          zIndex: 1000,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          animation: 'slideUp 0.3s ease-out',
+          cursor: 'pointer',
+        }} onClick={() => setDownloadError('')}>
+          ⚠ {downloadError}
+        </div>
+      )}
 
       {/* Bottom Status Bar */}
       <footer className="status-bar">
@@ -2432,6 +2572,11 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset }) {
               color: 'var(--success)', 
               fontWeight: 500 
             }}>Saved</span>
+            {lastSavedAt && (
+              <span style={{ marginLeft: '6px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                Last saved {lastSavedAt}
+              </span>
+            )}
           </div>
         </div>
 

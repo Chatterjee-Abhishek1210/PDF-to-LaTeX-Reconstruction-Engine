@@ -403,7 +403,7 @@ class LaTeXGenerator:
             lines = []
             for span in block.spans:
                 text = self._escape_latex(span.text)
-                if not text.strip() and not text:
+                if not text.strip():
                     continue
                 
                 # Apply font formatting to this specific span
@@ -580,6 +580,7 @@ class LaTeXGenerator:
             return ""
 
         special_chars = {
+            '\\': r'\textbackslash{}',
             '&': r'\&',
             '%': r'\%',
             '$': r'\$',
@@ -608,10 +609,6 @@ class LaTeXGenerator:
             '\u00a0': ' ',                # non-breaking space → normal space
             '–': '--',                    # en-dash
             '—': '---',                   # em-dash
-            '"': "``",                    # left double quote
-            '"': "''",                    # right double quote
-            ''': "`",                     # left single quote
-            ''': "'",                     # right single quote
             '…': '...',                   # ellipsis
         }
         for char, escaped in unicode_map.items():

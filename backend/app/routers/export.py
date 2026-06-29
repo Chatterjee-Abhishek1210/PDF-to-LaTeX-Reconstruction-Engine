@@ -1,17 +1,39 @@
 """
 Export Router — Handles exporting LaTeX code, compiled PDF, and ZIP packages.
+Also provides on-demand compile-and-download for edited LaTeX source.
 """
+import pdfplumber
 import os
+import subprocess
 import logging
-from fastapi import APIRouter, HTTPException
+import shutil
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.config import OUTPUT_DIR
+from app.config import OUTPUT_DIR, PANDOC_PATH, LATEX_COMPILER, LATEX_TIMEOUT
 from app.utils.helpers import create_zip_package
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["export"])
+
+
+@router.get("/structure/{job_id}")
+async def get_structure(job_id: str):
+    """
+    Return the extracted document structure for the Visual Editor.
+    This contains exact x,y positions, font sizes, colors from the original PDF.
+    """
+    structure_path = os.path.join(str(OUTPUT_DIR), job_id, "structure.json")
+
+    if not os.path.exists(structure_path):
+        raise HTTPException(status_code=404, detail="Document structure not found")
+
+    import json
+    with open(structure_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    return JSONResponse(content=data)
 
 
 @router.get("/export/tex/{job_id}")
@@ -125,7 +147,7 @@ async def get_page_preview(job_id: str, page_num: int = 0):
     """
     Get a page preview image of the original PDF.
     """
-    import fitz
+    import pdfplumber
     from app.config import UPLOAD_DIR, DPI_FOR_PREVIEW
 
     upload_dir = os.path.join(str(UPLOAD_DIR), job_id)
@@ -141,15 +163,238 @@ async def get_page_preview(job_id: str, page_num: int = 0):
     preview_path = os.path.join(output_dir, f"preview_p{page_num}.png")
 
     if not os.path.exists(preview_path):
-        doc = fitz.open(pdf_path)
-        if page_num >= len(doc):
-            doc.close()
-            raise HTTPException(status_code=404, detail="Page not found")
+        with pdfplumber.open(pdf_path) as doc:
+            if page_num >= len(doc.pages):
+                raise HTTPException(status_code=404, detail="Page not found")
 
-        page = doc[page_num]
-        mat = fitz.Matrix(DPI_FOR_PREVIEW / 72, DPI_FOR_PREVIEW / 72)
-        pix = page.get_pixmap(matrix=mat)
-        pix.save(preview_path)
-        doc.close()
+            page = doc.pages[page_num]
+            im = page.to_image(resolution=DPI_FOR_PREVIEW)
+            im.save(preview_path)
 
     return FileResponse(preview_path, media_type="image/png")
+
+
+@router.get("/preview-compiled/count/{job_id}")
+async def get_compiled_page_count(job_id: str):
+    """
+    Get the total number of pages in the compiled output PDF.
+    """
+    import fitz
+    from app.config import OUTPUT_DIR
+
+    compile_dir = os.path.join(str(OUTPUT_DIR), job_id, "compile_workspace")
+    pdf_path = os.path.join(compile_dir, "document.pdf")
+
+    if not os.path.exists(pdf_path):
+        # Fallback to output.pdf if available (from initial generation)
+        pdf_path = os.path.join(str(OUTPUT_DIR), job_id, "output.pdf")
+        if not os.path.exists(pdf_path):
+            # Fallback to original if not compiled yet
+            from app.config import UPLOAD_DIR
+            upload_dir = os.path.join(str(UPLOAD_DIR), job_id)
+            if not os.path.exists(upload_dir):
+                return JSONResponse({"count": 0})
+            pdf_files = [f for f in os.listdir(upload_dir) if f.endswith(".pdf")]
+            if not pdf_files:
+                return JSONResponse({"count": 0})
+            pdf_path = os.path.join(upload_dir, pdf_files[0])
+
+    try:
+        with pdfplumber.open(pdf_path) as doc:
+            count = len(doc.pages)
+            return JSONResponse({"count": count})
+    except Exception as e:
+        print(f"Error counting pages: {e}")
+        return JSONResponse({"count": 0})
+
+
+@router.get("/preview-compiled/{job_id}/{page_num}")
+async def get_compiled_page_preview(job_id: str, page_num: int = 0, t: str = None):
+    """
+    Get a page preview image of the compiled PDF.
+    """
+    import pdfplumber
+    from app.config import OUTPUT_DIR, UPLOAD_DIR, DPI_FOR_PREVIEW
+
+    output_dir = os.path.join(str(OUTPUT_DIR), job_id)
+    compile_dir = os.path.join(output_dir, "compile_workspace")
+    pdf_path = os.path.join(compile_dir, "document.pdf")
+
+    # If the output PDF doesn't exist, fallback to output.pdf then original
+    if not os.path.exists(pdf_path):
+        pdf_path = os.path.join(str(OUTPUT_DIR), job_id, "output.pdf")
+        if not os.path.exists(pdf_path):
+            upload_dir = os.path.join(str(UPLOAD_DIR), job_id)
+            if os.path.exists(upload_dir):
+                pdf_files = [f for f in os.listdir(upload_dir) if f.endswith(".pdf")]
+                if pdf_files:
+                    pdf_path = os.path.join(upload_dir, pdf_files[0])
+                else:
+                    raise HTTPException(status_code=404, detail="Compiled PDF not found")
+            else:
+                raise HTTPException(status_code=404, detail="Compiled PDF not found")
+
+    # Use 't' param in filename to bust cache if provided, else just standard compiled preview
+    cache_suffix = f"_{t}" if t else ""
+    preview_path = os.path.join(output_dir, f"compiled_preview_p{page_num}{cache_suffix}.png")
+
+    if not os.path.exists(preview_path):
+        with pdfplumber.open(pdf_path) as doc:
+            if page_num >= len(doc.pages):
+                raise HTTPException(status_code=404, detail="Page not found")
+
+            page = doc.pages[page_num]
+            im = page.to_image(resolution=DPI_FOR_PREVIEW)
+            im.save(preview_path)
+
+    return FileResponse(preview_path, media_type="image/png")
+
+
+# ─────────────────────────────────────────────────────────────────
+# Compile-and-download endpoints for edited LaTeX source
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/export/compile-pdf/{job_id}")
+async def compile_and_download_pdf(job_id: str, request: Request):
+    """
+    Accept current edited LaTeX source, compile to PDF server-side,
+    and return the compiled PDF as a download.
+    """
+    try:
+        body = await request.json()
+        latex_code = body.get("latex_code", "")
+
+        if not latex_code.strip():
+            raise HTTPException(status_code=400, detail="No LaTeX source provided")
+
+        # Create a compile workspace
+        compile_dir = os.path.join(str(OUTPUT_DIR), job_id, "compile_workspace")
+        os.makedirs(compile_dir, exist_ok=True)
+
+        # Copy images from the output directory if they exist
+        images_src = os.path.join(str(OUTPUT_DIR), job_id, "images")
+        images_dst = os.path.join(compile_dir, "images")
+        if os.path.exists(images_src) and not os.path.exists(images_dst):
+            shutil.copytree(images_src, images_dst)
+
+        # Write the LaTeX source
+        tex_path = os.path.join(compile_dir, "document.tex")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(latex_code)
+
+        # Determine compiler
+        compiler = shutil.which(LATEX_COMPILER) or shutil.which("pdflatex")
+        if not compiler:
+            raise HTTPException(
+                status_code=500,
+                detail="No LaTeX compiler available on server. Install TeX Live or MiKTeX."
+            )
+
+        # Compile (two passes for cross-references)
+        for _ in range(2):
+            process = subprocess.run(
+                [
+                    compiler,
+                    "-interaction=nonstopmode",
+                    "-shell-escape",
+                    "-output-directory", compile_dir,
+                    tex_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=LATEX_TIMEOUT,
+                cwd=compile_dir,
+            )
+
+        pdf_path = os.path.join(compile_dir, "document.pdf")
+        if not os.path.exists(pdf_path):
+            # Extract error info from log
+            log_text = process.stdout + process.stderr
+            error_lines = [l for l in log_text.split("\n") if l.startswith("!")]
+            error_msg = "; ".join(error_lines[:5]) if error_lines else "Compilation failed"
+            raise HTTPException(status_code=500, detail=f"LaTeX compilation failed: {error_msg}")
+
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename=f"{job_id}_compiled.pdf",
+        )
+
+    except HTTPException:
+        raise
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail=f"Compilation timed out after {LATEX_TIMEOUT}s")
+    except Exception as e:
+        logger.error(f"Compile-PDF failed for job {job_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Compilation failed: {str(e)}")
+
+
+@router.post("/export/compile-docx/{job_id}")
+async def compile_and_download_docx(job_id: str, request: Request):
+    """
+    Accept current edited LaTeX source, convert to DOCX via Pandoc,
+    and return the DOCX as a download.
+    Falls back to pdf2docx if Pandoc is not available.
+    """
+    try:
+        body = await request.json()
+        latex_code = body.get("latex_code", "")
+
+        if not latex_code.strip():
+            raise HTTPException(status_code=400, detail="No LaTeX source provided")
+
+        compile_dir = os.path.join(str(OUTPUT_DIR), job_id, "compile_workspace")
+        os.makedirs(compile_dir, exist_ok=True)
+
+        tex_path = os.path.join(compile_dir, "document.tex")
+        docx_path = os.path.join(compile_dir, "document.docx")
+
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(latex_code)
+
+        # Compile to PDF first, then use pdf2docx to ensure visual fidelity
+        pdf_path = os.path.join(compile_dir, "document.pdf")
+        if not os.path.exists(pdf_path):
+            # Need to compile first
+            compiler = shutil.which(LATEX_COMPILER) or shutil.which("pdflatex")
+            if compiler:
+                for _ in range(2):
+                    subprocess.run(
+                        [
+                            compiler,
+                            "-interaction=nonstopmode",
+                            "-shell-escape",
+                            "-output-directory", compile_dir,
+                            tex_path,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=LATEX_TIMEOUT,
+                        cwd=compile_dir,
+                    )
+
+        if os.path.exists(pdf_path):
+            try:
+                from pdf2docx import Converter
+                cv = Converter(pdf_path)
+                cv.convert(docx_path, start=0, end=None)
+                cv.close()
+
+                return FileResponse(
+                    docx_path,
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    filename=f"{job_id}_document.docx",
+                )
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"DOCX conversion failed: {str(e)}")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not generate DOCX. Neither Pandoc nor LaTeX compiler available."
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Compile-DOCX failed for job {job_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"DOCX conversion failed: {str(e)}")

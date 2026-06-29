@@ -28,9 +28,25 @@ import {
  * Premium, modern UI with dark/light mode and glassmorphism design
  */
 export default function App() {
-  const [activeTab, setActiveTab] = useState('upload')
+  const [activeTab, setActiveTab] = useState(() => {
+    // Restore active tab from session safely
+    try {
+      return localStorage.getItem('pdf2latex-active-tab') || 'upload'
+    } catch (e) {
+      return 'upload'
+    }
+  })
   const conversion = useConversion()
   const [editedCode, setEditedCode] = useState('')
+
+  // Persist active tab safely
+  useEffect(() => {
+    try {
+      localStorage.setItem('pdf2latex-active-tab', activeTab)
+    } catch (e) {
+      console.warn('Failed to save tab state', e)
+    }
+  }, [activeTab])
 
   const handleFileSelect = async (file) => {
     await conversion.uploadAndConvert(file)
@@ -51,21 +67,33 @@ export default function App() {
     }
   }, [conversion.latexCode])
 
+  // On mount: if session was restored with complete status, go to editor
+  useEffect(() => {
+    if (conversion.status === 'complete' && conversion.latexCode && activeTab === 'upload') {
+      setActiveTab('editor')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-switch to results when complete and visual animation is finished
   if (conversion.status === 'complete' && visualFinished && activeTab === 'progress') {
     setActiveTab('editor')
   }
 
-  if (activeTab === 'editor' && conversion.latexCode) {
+  if (activeTab === 'editor' && (conversion.latexCode || editedCode)) {
     return (
       <LaTeXEditor
-        code={editedCode}
+        code={editedCode || conversion.latexCode}
         onCodeChange={setEditedCode}
         jobId={conversion.jobId}
         onReset={() => {
           conversion.reset()
+          setEditedCode('')
           setActiveTab('upload')
         }}
+        saveToBackend={conversion.saveToBackend}
+        loadFromBackend={conversion.loadFromBackend}
+        compileAndDownloadPdf={conversion.compileAndDownloadPdf}
+        compileAndDownloadDocx={conversion.compileAndDownloadDocx}
       />
     )
   }
@@ -73,7 +101,7 @@ export default function App() {
   const tabs = [
     { id: 'upload', label: 'Upload', icon: <UploadIcon /> },
     { id: 'progress', label: 'Progress', icon: <LightningIcon />, show: conversion.status !== 'idle' },
-    { id: 'editor', label: 'Live Editor', icon: <LaTeXIcon />, show: conversion.latexCode },
+    { id: 'editor', label: 'Live Editor', icon: <LaTeXIcon />, show: Boolean(conversion.latexCode) },
     { id: 'compare', label: 'Compare', icon: <CompareIcon />, show: conversion.status === 'complete' },
     { id: 'export', label: 'Export', icon: <ExportIcon />, show: conversion.status === 'complete' },
   ]
@@ -311,7 +339,12 @@ export default function App() {
         {/* Export Tab */}
         {activeTab === 'export' && (
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <ExportPanel jobId={conversion.jobId} />
+            <ExportPanel
+              jobId={conversion.jobId}
+              latexCode={editedCode || conversion.latexCode}
+              compileAndDownloadPdf={conversion.compileAndDownloadPdf}
+              compileAndDownloadDocx={conversion.compileAndDownloadDocx}
+            />
           </div>
         )}
       </main>

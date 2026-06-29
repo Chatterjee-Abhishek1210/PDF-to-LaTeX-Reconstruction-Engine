@@ -12,9 +12,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import (
     API_TITLE, API_VERSION, API_DESCRIPTION,
-    FRONTEND_URL, OUTPUT_DIR, UPLOAD_DIR
+    FRONTEND_URL, OUTPUT_DIR, UPLOAD_DIR, SAVE_DIR
 )
-from app.routers import upload, convert, export
+from app.routers import upload, convert, export, save
+from app.database import engine, Base
+import app.db_models
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 # Configure logging
 logging.basicConfig(
@@ -41,11 +46,13 @@ app.add_middleware(
 
 # Static file serving for outputs
 app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
+app.mount("/saves", StaticFiles(directory=str(SAVE_DIR)), name="saves")
 
 # Include routers
 app.include_router(upload.router)
 app.include_router(convert.router)
 app.include_router(export.router)
+app.include_router(save.router)
 
 
 @app.get("/")

@@ -799,6 +799,60 @@ body {
   background-color: var(--bg-tertiary);
 }
 
+.le-btn-save {
+  background-color: var(--success);
+}
+.le-btn-save:hover {
+  background-color: #00a885;
+}
+
+.le-btn-pdf {
+  background-color: #e17055;
+}
+.le-btn-pdf:hover {
+  background-color: #d6644a;
+}
+
+.le-btn-docx {
+  background-color: #0984e3;
+}
+.le-btn-docx:hover {
+  background-color: #0875ca;
+}
+
+.le-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.le-toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin-slow 0.8s linear infinite;
+}
+
+.export-card-primary {
+  border: 1px solid var(--accent);
+  background: rgba(108, 92, 231, 0.05);
+}
+
+.export-card-primary:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 15px rgba(108, 92, 231, 0.25);
+}
+
 .le-btn-icon {
   padding: 8px;
   border-radius: 6px;
@@ -1043,66 +1097,101 @@ input:checked + .le-slider:before {
   background-color: var(--accent);
 }
 
-/* Page Minimap Sidebar */
-.pdf-minimap {
-  width: 48px;
-  background-color: var(--bg-secondary);
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 0;
-  overflow-y: auto;
-  user-select: none;
-  flex-shrink: 0;
-}
-
-.minimap-page {
-  width: 32px;
-  height: 44px;
-  background-color: #ffffff;
-  border: 1px solid var(--border-color);
-  border-radius: 3px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Document Canvas — continuous flowing document (like Google Docs / Canva)
+   IMPORTANT: This is an isolated white-document context. The paper is always
+   white regardless of the app's dark/light theme (just like Google Docs). */
+.doc-canvas {
+  width: 100%;
+  max-width: 816px;
+  min-height: 80vh;
+  margin: 0 auto;
+  padding: 72px 80px 96px;
+  background-color: #ffffff !important;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 24px 60px rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #000000 !important;
+  color-scheme: light;
+  font-family: 'Computer Modern Serif', Georgia, serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  text-align: justify;
   position: relative;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-  transition: border-color 0.2s ease, transform 0.15s ease;
+  transition: box-shadow 0.25s ease;
 }
 
-.minimap-page:hover {
-  transform: scale(1.05);
-  border-color: var(--text-muted);
+/* Ensure text inside the document canvas defaults to black,
+   but allow inline styles (e.g. from \\textcolor) to override */
+.doc-canvas .tex-text,
+.doc-canvas .latex-paragraph,
+.doc-canvas .latex-section,
+.doc-canvas .latex-subsection,
+.doc-canvas .latex-subsubsection,
+.doc-canvas .latex-title,
+.doc-canvas .latex-author,
+.doc-canvas .latex-date,
+.doc-canvas .latex-abstract,
+.doc-canvas .latex-list-item,
+.doc-canvas .latex-desc-term,
+.doc-canvas .latex-desc-details,
+.doc-canvas .latex-bib-item,
+.doc-canvas .latex-table td {
+  color: #000000;
 }
 
-.minimap-page.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent);
+.doc-canvas a { color: #1a0dab; }
+.doc-canvas .tex-monospace { color: #1a1a2e; background-color: #f1f5f9; }
+
+.doc-canvas:hover {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.1),
+    0 30px 72px rgba(0, 0, 0, 0.06);
 }
 
-.minimap-page-number {
-  font-size: 0.65rem;
-  color: #333333;
-  font-weight: 600;
+.doc-canvas-footnotes {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid #d1d5db;
+  font-size: 9pt;
+  color: #4a4a5a;
+  text-align: left;
 }
 
-/* Right Preview Pane */
+.doc-canvas-footnotes .footnote-item {
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+/* Right Preview Pane — paper-gray background to frame the document */
 .preview-pane {
   flex: 1;
   height: 100%;
-  background-color: var(--bg-primary);
+  background-color: #f0f2f5;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px;
+  padding: 32px 24px 64px;
   position: relative;
   transition: background-color 0.2s ease;
   scroll-behavior: smooth;
+}
+
+[data-theme="dark"] .preview-pane {
+  background-color: #1e1e2e;
+}
+
+/* In dark mode, the document canvas stays white (like Google Docs) —
+   only boost the shadow so the white paper pops against the dark background */
+[data-theme="dark"] .doc-canvas {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 24px 60px rgba(0, 0, 0, 0.2);
 }
 
 .pdf-zoom-wrapper {
@@ -1114,57 +1203,7 @@ input:checked + .le-slider:before {
   transition: transform 0.1s ease;
 }
 
-/* simulated high fidelity A4 PDF pages */
-.pdf-page {
-  width: 210mm;
-  height: 297mm;
-  min-height: 297mm;
-  padding: 2.5cm;
-  background-color: #ffffff;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
-  margin-bottom: 24px;
-  position: relative;
-  box-sizing: border-box;
-  color: #000000;
-  font-family: 'Computer Modern Serif', Georgia, serif;
-  font-size: 11pt;
-  line-height: 1.5;
-  text-align: justify;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
-  transition: box-shadow 0.2s ease;
-}
-
-.page-content {
-  flex: 1;
-  width: 100%;
-  overflow: hidden;
-}
-
-.page-footer {
-  height: 24px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  font-size: 10pt;
-  color: #555555;
-  user-select: none;
-}
-
-.page-footnotes {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 0.5px solid #000000;
-  font-size: 9pt;
-  color: #333333;
-  text-align: left;
-}
-
-.footnote-item {
-  margin-bottom: 4px;
-}
+/* (pdf-page styles moved to bottom — used only in HTML export) */
 
 /* Typographical details inside simulated pages */
 .latex-title-block {
@@ -1817,3 +1856,48 @@ input:checked + .le-slider:before {
   color: rgba(255, 255, 255, 0.8);
 }
 
+/* ===== PDF Pages & LaTeX Rendering Styles ===== */
+.pdf-page {
+  width: 210mm;
+  height: 297mm;
+  min-height: 297mm;
+  padding: 2.5cm;
+  background-color: #ffffff;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  margin: 20px auto;
+  position: relative;
+  box-sizing: border-box;
+  color: #000000;
+  font-size: 11pt;
+  line-height: 1.5;
+  text-align: justify;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+.page-content { flex: 1; width: 100%; overflow: hidden; }
+.page-footer { height: 24px; display: flex; align-items: flex-end; justify-content: center; font-size: 10pt; color: #555555; }
+.page-footnotes { margin-top: 12px; padding-top: 8px; border-top: 0.5px solid #000000; font-size: 9pt; color: #333333; }
+.footnote-item { margin-bottom: 4px; }
+.latex-title-block { text-align: center; margin-bottom: 24px; }
+.latex-title { font-size: 17pt; font-weight: bold; margin-bottom: 12px; }
+.latex-author { font-size: 11pt; margin-bottom: 6px; }
+.latex-date { font-size: 11pt; margin-bottom: 18px; }
+.latex-abstract { margin: 18px 24px; font-size: 9.5pt; }
+.latex-abstract-heading { text-align: center; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; font-size: 9pt; }
+.latex-section { font-size: 13pt; font-weight: bold; margin-top: 18px; margin-bottom: 8px; }
+.latex-subsection { font-size: 11pt; font-weight: bold; margin-top: 14px; margin-bottom: 6px; }
+.latex-subsubsection { font-size: 10pt; font-weight: bold; font-style: italic; margin-top: 12px; margin-bottom: 4px; }
+.latex-paragraph { margin-bottom: 10px; text-indent: 1.5em; }
+.latex-section + .latex-paragraph { text-indent: 0; }
+.underline { text-decoration: underline; }
+.tex-monospace { font-family: monospace; background-color: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9pt; color: #1a1a2e; }
+.latex-equation-block { display: flex; align-items: center; justify-content: space-between; margin: 14px 0; }
+.latex-equation-math { flex: 1; display: flex; justify-content: center; }
+.latex-itemize, .latex-enumerate { margin: 10px 0 10px 24px; }
+.latex-table-container { display: flex; flex-direction: column; align-items: center; margin: 16px 0; }
+.latex-table { border-collapse: collapse; margin: 0 auto; font-size: 10pt; }
+.latex-table td { padding: 6px 12px; }
+.latex-table tr.border-top td { border-top: 1px solid #000000; }
+.latex-table tr:last-child td { border-bottom: 1px solid #000000; }

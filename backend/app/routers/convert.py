@@ -5,10 +5,10 @@ import os
 import asyncio
 import logging
 import json
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
 
-from app.config import UPLOAD_DIR, OUTPUT_DIR, LATEX_COMPILER
+from app.config import UPLOAD_DIR, OUTPUT_DIR, SAVE_DIR, LATEX_COMPILER
 from app.services.pdf_parser import PDFParser
 from app.services.latex_generator import LaTeXGenerator
 from app.services.latex_compiler import LaTeXCompiler
@@ -89,6 +89,11 @@ async def _run_conversion(job_id: str, pdf_path: str, output_dir: str):
         tex_path = os.path.join(output_dir, "output.tex")
         with open(tex_path, "w", encoding="utf-8") as f:
             f.write(latex_code)
+
+        # Save document structure for the Visual Editor
+        structure_path = os.path.join(output_dir, "structure.json")
+        with open(structure_path, "w", encoding="utf-8") as f:
+            f.write(structure.model_dump_json(indent=2))
 
         jobs[job_id]["latex_code"] = latex_code
         _update_job(job_id, 75, "compiling", "Compiling LaTeX to PDF...")
@@ -223,3 +228,90 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
         logger.info(f"WebSocket disconnected for job {job_id}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+
+
+@router.post("/save/{job_id}")
+async def save_document(job_id: str, request: Request):
+    """
+    Save the current LaTeX source and metadata for a document.
+    Used for autosave and explicit save checkpoints.
+    """
+    try:
+        body = await request.json()
+        latex_code = body.get("latex_code", "")
+        cursor_line = body.get("cursor_line", 1)
+        cursor_col = body.get("cursor_col", 1)
+        scroll_position = body.get("scroll_position", 0)
+
+        save_dir = os.path.join(str(SAVE_DIR), job_id)
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save LaTeX source
+        tex_path = os.path.join(save_dir, "document.tex")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(latex_code)
+
+        # Save metadata
+        metadata = {
+            "job_id": job_id,
+            "cursor_line": cursor_line,
+            "cursor_col": cursor_col,
+            "scroll_position": scroll_position,
+            "saved_at": __import__("datetime").datetime.now().isoformat(),
+        }
+        meta_path = os.path.join(save_dir, "metadata.json")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f)
+
+        logger.info(f"Saved document for job {job_id}")
+        return JSONResponse(content={
+            "status": "saved",
+            "job_id": job_id,
+            "message": "Document saved successfully",
+        })
+
+    except Exception as e:
+        logger.error(f"Save failed for job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Save failed: {str(e)}")
+
+
+@router.get("/load/{job_id}")
+async def load_document(job_id: str):
+    """
+    Load the last saved LaTeX source and metadata for a document.
+    Used to restore state on page refresh.
+    """
+    save_dir = os.path.join(str(SAVE_DIR), job_id)
+
+    # Try loading from save directory first
+    tex_path = os.path.join(save_dir, "document.tex")
+    meta_path = os.path.join(save_dir, "metadata.json")
+
+    latex_code = ""
+    metadata = {}
+
+    if os.path.exists(tex_path):
+        with open(tex_path, "r", encoding="utf-8") as f:
+            latex_code = f.read()
+    else:
+        # Fallback: try to load from the original conversion output
+        output_tex = os.path.join(str(OUTPUT_DIR), job_id, "output.tex")
+        if os.path.exists(output_tex):
+            with open(output_tex, "r", encoding="utf-8") as f:
+                latex_code = f.read()
+        else:
+            raise HTTPException(status_code=404, detail=f"No saved document found for job {job_id}")
+
+    if os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+
+    return JSONResponse(content={
+        "job_id": job_id,
+        "latex_code": latex_code,
+        "cursor_line": metadata.get("cursor_line", 1),
+        "cursor_col": metadata.get("cursor_col", 1),
+        "scroll_position": metadata.get("scroll_position", 0),
+        "saved_at": metadata.get("saved_at", ""),
+    })
+

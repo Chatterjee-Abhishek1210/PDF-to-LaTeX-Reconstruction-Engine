@@ -6,14 +6,22 @@ import { useState, useEffect } from 'react'
  */
 export default function ThemeToggle() {
   const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('pdf2latex-theme')
-    return saved ? saved === 'dark' : true // Default to dark
+    try {
+      const saved = localStorage.getItem('pdf2latex-theme')
+      return saved ? saved === 'dark' : true // Default to dark
+    } catch (e) {
+      return true
+    }
   })
 
   useEffect(() => {
     const theme = isDark ? 'dark' : 'light'
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('pdf2latex-theme', theme)
+    try {
+      localStorage.setItem('pdf2latex-theme', theme)
+    } catch (e) {
+      console.warn('Theme save failed', e)
+    }
   }, [isDark])
 
   return (
