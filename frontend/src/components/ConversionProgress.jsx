@@ -40,8 +40,15 @@ export default function ConversionProgress({ status, progress, message, onVisual
     return idx !== -1 ? idx : 0
   }
 
-  const [visualIdx, setVisualIdx] = useState(0)
-  const [visualProgress, setVisualProgress] = useState(0)
+  const [visualIdx, setVisualIdx] = useState(() => {
+    return status === 'idle' || status === 'uploading' ? 0 : getParentStatusIndex(status)
+  })
+  const [visualProgress, setVisualProgress] = useState(() => {
+    if (status === 'idle' || status === 'uploading') return 0
+    if (status === 'failed') return progress
+    const target = getParentStatusIndex(status)
+    return target >= 0 ? stepProgressValues[target] : 0
+  })
 
   // Reset visual state when starting/uploading a new file
   useEffect(() => {

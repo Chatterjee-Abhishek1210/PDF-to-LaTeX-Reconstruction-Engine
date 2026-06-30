@@ -127,6 +127,7 @@ class TextExtractor:
                         font=span_font,
                         x=span_bbox[0],
                         y=span_bbox[1],
+                        base_y=span.get("origin", [span_bbox[0], span_bbox[1]])[1],
                         width=span_bbox[2] - span_bbox[0],
                         height=span_bbox[3] - span_bbox[1],
                     ))

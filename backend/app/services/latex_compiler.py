@@ -66,6 +66,7 @@ class LaTeXCompiler:
                 process = subprocess.run(
                     [
                         self.compiler,
+                        "-synctex=1",
                         "-interaction=nonstopmode",
                         "-shell-escape",
                         "-output-directory", str(output_dir),

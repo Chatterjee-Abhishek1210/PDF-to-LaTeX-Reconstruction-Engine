@@ -1,0 +1,44 @@
+\documentclass[12pt,letterpaper]{article}
+
+% ===== Encoding and fonts =====
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage{helvet}
+\usepackage{courier}
+
+% ===== Page geometry (zero margins) =====
+\usepackage[top=0bp,bottom=0bp,left=0bp,right=0bp,headheight=0bp,headsep=0bp,footskip=0bp,paperwidth=612.00bp,paperheight=792.00bp]{geometry}
+
+% ===== Packages =====
+\usepackage[dvipsnames,svgnames,x11names]{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[normalem]{ulem}  % for \uline (underline)
+
+% ===== No default spacing =====
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\pagestyle{empty}
+
+% ===== Currency symbols =====
+\usepackage{textcomp}
+\newcommand{\rupee}{\textrm{Rs.}}
+
+\begin{document}
+
+\noindent
+\begin{tikzpicture}[x=1bp,y=-1bp,inner sep=0pt,outer sep=0pt]
+  \useasboundingbox (0,0) rectangle (612.00,792.00);
+  \fill[fill=black] (24.48,24.00) rectangle (587.64,24.48);
+  \fill[fill=black] (24.00,24.48) rectangle (24.48,767.64);
+  \fill[fill=black] (587.64,24.48) rectangle (588.12,767.64);
+  \fill[fill=black] (24.48,767.64) rectangle (587.64,768.12);
+  \node[anchor=north west,inner sep=0pt] at (72.14,72.01) {\includegraphics[width=399.05bp,height=309.33bp]{images/image_p1_1.png}};
+  \node[anchor=north west,inner sep=0pt] at (72.01,382.55) {\includegraphics[width=411.83bp,height=303.50bp]{images/image_p1_2.png}};
+\end{tikzpicture}
+
+\end{document}

@@ -394,49 +394,92 @@ class LaTeXGenerator:
     # ──────────────────────────────────────────────────────────────
     def _place_text_block(self, block: TextBlock, page_h: float = 0) -> str:
         """
-        Place a text block at its absolute position.
-        If spans are present, render each span as a separate absolute node
-        to guarantee 100% pixel-perfect positioning and prevent different
-        font metrics in LaTeX from shifting text or breaking columns.
+        Place a text block by grouping spans into lines and rendering each line
+        at its exact Y coordinate. For spans on the same line, we insert \\hspace* 
+        if there is a significant gap, preventing horizontal overlapping while preserving 
+        layout perfectly.
         """
-        if block.spans:
-            lines = []
-            for span in block.spans:
-                text = self._escape_latex(span.text)
-                if not text.strip():
-                    continue
-                
-                # Apply font formatting to this specific span
-                inner = self._apply_font_formatting(text, span.font)
-                
-                # Since spans are single-line, we do not set text width (prevents wrapping)
+        if not block.spans:
+            x = block.x
+            y = block.y
+            w = block.width
+            inner = self._render_block_text(block)
+            is_multiline = block.line_count > 1
+            if is_multiline:
+                generous_w = w * 1.15
+                node_opts = f"anchor=north west,inner sep=0pt,outer sep=0pt,text width={generous_w:.2f}bp"
+            else:
                 node_opts = "anchor=north west,inner sep=0pt,outer sep=0pt"
-                lines.append(
-                    f"  \\node[{node_opts}] at ({span.x:.2f},{span.y:.2f}) "
-                    f"{{{inner}}};"
-                )
-            return "\n".join(lines)
+            return f"  \\node[{node_opts}] at ({x:.2f},{y:.2f}) {{{inner}}};"
 
-        # Fallback if no spans are present: render block text as a single node
-        x = block.x
-        y = block.y
-        w = block.width
-        inner = self._render_block_text(block)
-        is_multiline = block.line_count > 1
+        lines_out = []
+        current_line_spans = []
+        current_line_y = None
+        current_line_base_y = None
+        current_line_x = None
 
-        if is_multiline:
-            generous_w = w * 1.15
-            node_opts = (
-                f"anchor=north west,inner sep=0pt,outer sep=0pt,"
-                f"text width={generous_w:.2f}bp"
+        for span in block.spans:
+            text = self._escape_latex(span.text)
+            if not text.strip() and not text:
+                continue
+
+            if current_line_y is None:
+                current_line_y = span.y
+                current_line_base_y = getattr(span, "base_y", span.y)
+                current_line_x = span.x
+                current_line_spans.append(span)
+            else:
+                y_diff = abs(span.y - current_line_y)
+                if y_diff > span.height * 0.5:
+                    # Render current line
+                    inner = self._render_line_spans_with_kerning(current_line_spans)
+                    node_opts = "anchor=base west,inner sep=0pt,outer sep=0pt"
+                    lines_out.append(
+                        f"  \\node[{node_opts}] at ({current_line_x:.2f},{current_line_base_y:.2f}) "
+                        f"{{{inner}}};"
+                    )
+                    # Start new line
+                    current_line_y = span.y
+                    current_line_base_y = getattr(span, "base_y", span.y)
+                    current_line_x = span.x
+                    current_line_spans = [span]
+                else:
+                    current_line_spans.append(span)
+
+        if current_line_spans:
+            inner = self._render_line_spans_with_kerning(current_line_spans)
+            node_opts = "anchor=base west,inner sep=0pt,outer sep=0pt"
+            lines_out.append(
+                f"  \\node[{node_opts}] at ({current_line_x:.2f},{current_line_base_y:.2f}) "
+                f"{{{inner}}};"
             )
-        else:
-            node_opts = "anchor=north west,inner sep=0pt,outer sep=0pt"
 
-        return (
-            f"  \\node[{node_opts}] at ({x:.2f},{y:.2f}) "
-            f"{{{inner}}};"
-        )
+        return "\n".join(lines_out)
+
+    def _render_line_spans_with_kerning(self, spans: List[TextSpan]) -> str:
+        parts = []
+        prev_span = None
+
+        for span in spans:
+            text = self._escape_latex(span.text)
+            if not text.strip() and not text:
+                continue
+                
+            formatted_text = self._apply_font_formatting(text, span.font)
+            
+            if prev_span is not None:
+                # Calculate horizontal gap between end of prev span and start of this span
+                prev_end_x = prev_span.x + prev_span.width
+                gap = span.x - prev_end_x
+                
+                # If there's a physical gap in the PDF > 1bp, inject horizontal space
+                if gap > 1.0:
+                    parts.append(f"\\hspace*{{{gap:.2f}bp}}")
+
+            parts.append(formatted_text)
+            prev_span = span
+
+        return "".join(parts)
 
     def _render_spans(self, spans: List[TextSpan]) -> str:
         """Render per-span formatting for mixed-style text."""
@@ -610,6 +653,14 @@ class LaTeXGenerator:
             '–': '--',                    # en-dash
             '—': '---',                   # em-dash
             '…': '...',                   # ellipsis
+            '•': r'\textbullet{}',        # standard bullet
+            '·': r'\textperiodcentered{}',# middle dot
+            '◦': r'$\circ$',              # hollow bullet
+            '▪': r'$\blacksquare$',       # square bullet
+            '■': r'$\blacksquare$',       # large square
+            '\uf0b7': r'\textbullet{}',   # symbol font bullet
+            '\uf0a7': r'$\blacksquare$',  # symbol font square
+            '\u25cf': r'\textbullet{}',   # black circle
         }
         for char, escaped in unicode_map.items():
             result = result.replace(char, escaped)

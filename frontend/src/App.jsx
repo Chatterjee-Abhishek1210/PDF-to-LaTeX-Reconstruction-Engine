@@ -3,16 +3,12 @@ import './index.css'
 import { useConversion } from './hooks/useConversion'
 import UploadZone from './components/UploadZone'
 import ConversionProgress from './components/ConversionProgress'
-import SideBySideView from './components/SideBySideView'
 import LaTeXEditor from './components/LaTeXEditor'
 import ThemeToggle from './components/ThemeToggle'
-import ExportPanel from './components/ExportPanel'
 import {
   UploadIcon,
   LightningIcon,
   LaTeXIcon,
-  CompareIcon,
-  ExportIcon,
   ColorIcon,
   TypographyIcon,
   LayoutIcon,
@@ -31,7 +27,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
     // Restore active tab from session safely
     try {
-      return localStorage.getItem('pdf2latex-active-tab') || 'upload'
+      const saved = localStorage.getItem('pdf2latex-active-tab');
+      return ['upload', 'progress', 'editor'].includes(saved) ? saved : 'upload';
     } catch (e) {
       return 'upload'
     }
@@ -102,8 +99,6 @@ export default function App() {
     { id: 'upload', label: 'Upload', icon: <UploadIcon /> },
     { id: 'progress', label: 'Progress', icon: <LightningIcon />, show: conversion.status !== 'idle' },
     { id: 'editor', label: 'Live Editor', icon: <LaTeXIcon />, show: Boolean(conversion.latexCode) },
-    { id: 'compare', label: 'Compare', icon: <CompareIcon />, show: conversion.status === 'complete' },
-    { id: 'export', label: 'Export', icon: <ExportIcon />, show: conversion.status === 'complete' },
   ]
 
 
@@ -289,15 +284,6 @@ export default function App() {
                   <LaTeXIcon size={16} />
                   View LaTeX Code
                 </button>
-                <button 
-                  className="btn-secondary" 
-                  onClick={() => setActiveTab('compare')}
-                  id="view-compare-btn"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  <CompareIcon size={16} />
-                  Compare PDFs
-                </button>
               </div>
             )}
 
@@ -317,36 +303,26 @@ export default function App() {
           </div>
         )}
 
+        {/* Editor Fallback / Loading State */}
+        {activeTab === 'editor' && !(conversion.latexCode || editedCode) && (
+          <div style={{ textAlign: 'center', marginTop: '5rem', color: 'var(--text-muted)' }}>
+            {conversion.jobId ? (
+              <>
+                <span className="btn-spinner" style={{ width: '32px', height: '32px', borderTopColor: 'var(--accent-light)', borderWidth: '3px', marginBottom: '1rem' }}></span>
+                <div>Restoring editor session...</div>
+              </>
+            ) : (
+              <div>
+                <p style={{ marginBottom: '1rem' }}>No active document found.</p>
+                <button className="btn-primary" onClick={() => setActiveTab('upload')}>
+                  Go to Upload
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* LaTeX Editor Tab is handled by early return for full viewport experience */}
-
-        {/* Compare Tab */}
-        {activeTab === 'compare' && (
-          <div>
-            <div className="section-header">
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <CompareIcon size={24} />
-                Visual Comparison
-              </h2>
-              <p>Side-by-side comparison of original and generated PDFs</p>
-            </div>
-            <SideBySideView
-              jobId={conversion.jobId}
-              ssimScore={conversion.ssimScore}
-            />
-          </div>
-        )}
-
-        {/* Export Tab */}
-        {activeTab === 'export' && (
-          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <ExportPanel
-              jobId={conversion.jobId}
-              latexCode={editedCode || conversion.latexCode}
-              compileAndDownloadPdf={conversion.compileAndDownloadPdf}
-              compileAndDownloadDocx={conversion.compileAndDownloadDocx}
-            />
-          </div>
-        )}
       </main>
 
       {/* Footer */}

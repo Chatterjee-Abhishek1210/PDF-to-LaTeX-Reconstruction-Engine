@@ -40,6 +40,7 @@ class TextSpan(BaseModel):
     font: FontInfo
     x: float = 0
     y: float = 0
+    base_y: float = 0  # Typography baseline Y coordinate
     width: float = 0
     height: float = 0
 

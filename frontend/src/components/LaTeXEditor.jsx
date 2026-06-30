@@ -7,6 +7,14 @@ import { stex } from '@codemirror/legacy-modes/mode/stex'
 import { linter, lintGutter, setDiagnostics } from '@codemirror/lint'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+import { Document, Page, pdfjs } from 'react-pdf'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString()
 
 import {
   LaTeXIcon,
@@ -47,23 +55,23 @@ class LaTeXCompiler {
     this.onRefClick = onRefClick
     this.expandedText = this.expandMacros(source)
     this.cleanText = this.expandedText.replace(/(?<!\\)%.*/g, (match) => ' '.repeat(match.length))
-    
+
     this.title = 'Untitled LaTeX Document'
     this.author = ''
     this.date = ''
-    
+
     this.labels = {}
     this.citations = {}
     this.footnotes = []
     this.footnoteCount = 0
-    
+
     this.sectionCount = 0
     this.subsectionCount = 0
     this.subsubsectionCount = 0
     this.equationCount = 0
     this.figureCount = 0
     this.tableCount = 0
-    
+
     this.errors = []
     this.outline = []
   }
@@ -141,15 +149,15 @@ class LaTeXCompiler {
         defn: match[3]
       }
     }
-    
+
     let expanded = text.replace(macroRegex, '')
     let expandedAny = true
     let iterations = 0
-    
+
     while (expandedAny && iterations < 5) {
       expandedAny = false
       iterations++
-      
+
       for (const [name, macro] of Object.entries(macros)) {
         if (macro.numArgs === 0) {
           const usageRegex = new RegExp(`\\\\${name}\\b`, 'g')
@@ -184,7 +192,7 @@ class LaTeXCompiler {
             if (args.length === macro.numArgs) {
               let replaced = macro.defn
               for (let i = 0; i < args.length; i++) {
-                replaced = replaced.replace(new RegExp(`#${i+1}`, 'g'), args[i])
+                replaced = replaced.replace(new RegExp(`#${i + 1}`, 'g'), args[i])
               }
               expanded = expanded.substring(0, m.index) + replaced + expanded.substring(currentEnd)
               expandedAny = true
@@ -202,10 +210,10 @@ class LaTeXCompiler {
   preScan() {
     const titleMatch = this.cleanText.match(/\\title\s*\{((?:[^{}]|\{[^{}]*\})*)\}/)
     if (titleMatch) this.title = titleMatch[1]
-    
+
     const authorMatch = this.cleanText.match(/\\author\s*\{((?:[^{}]|\{[^{}]*\})*)\}/)
     if (authorMatch) this.author = authorMatch[1]
-    
+
     const dateMatch = this.cleanText.match(/\\date\s*\{((?:[^{}]|\{[^{}]*\})*)\}/)
     if (dateMatch) this.date = dateMatch[1]
 
@@ -230,7 +238,7 @@ class LaTeXCompiler {
     let figCount = 0
     let tabCount = 0
     let activeRef = ''
-    
+
     while ((match = labelAndCounterRegex.exec(this.cleanText)) !== null) {
       const cmd = match[1]
       if (cmd.startsWith('section')) {
@@ -264,13 +272,13 @@ class LaTeXCompiler {
     const blocks = []
     const docStartRegex = /\\begin\s*\{document\}/
     const docEndRegex = /\\end\s*\{document\}/
-    
+
     let bodyText = this.cleanText
     let bodyOffset = 0
-    
+
     const startMatch = docStartRegex.exec(this.cleanText)
     const endMatch = docEndRegex.exec(this.cleanText)
-    
+
     if (startMatch) {
       bodyOffset = startMatch.index + startMatch[0].length
       let endOffset = this.cleanText.length
@@ -279,7 +287,7 @@ class LaTeXCompiler {
       }
       bodyText = this.cleanText.substring(bodyOffset, endOffset)
     }
-    
+
     let bodyPos = 0
     while (bodyPos < bodyText.length) {
       const rest = bodyText.substring(bodyPos)
@@ -288,15 +296,15 @@ class LaTeXCompiler {
         bodyPos += wsMatch[0].length
         continue
       }
-      
+
       const absPos = bodyOffset + bodyPos
       const lineNum = this.getLineNum(absPos)
-      
+
       // Stop compilation if we hit the end of the document
       if (rest.startsWith('\\end{document}')) {
         break
       }
-      
+
       if (rest.startsWith('\\maketitle')) {
         blocks.push({ type: 'maketitle', line: lineNum, content: '' })
         bodyPos += '\\maketitle'.length
@@ -308,7 +316,7 @@ class LaTeXCompiler {
         bodyPos += '\\tableofcontents'.length
         continue
       }
-      
+
       const secMatch = rest.match(/^\\(section|subsection|subsubsection)\b/)
       if (secMatch) {
         const secType = secMatch[1]
@@ -327,7 +335,7 @@ class LaTeXCompiler {
           }
         }
       }
-      
+
       const envMatch = rest.match(/^\\begin\s*\{([^}]+)\}/)
       if (envMatch) {
         const envName = envMatch[1]
@@ -355,7 +363,7 @@ class LaTeXCompiler {
           continue
         }
       }
-      
+
       if (rest.startsWith('$$')) {
         const endMath = bodyText.indexOf('$$', bodyPos + 2)
         if (endMath !== -1) {
@@ -380,33 +388,33 @@ class LaTeXCompiler {
           continue
         }
       }
-      
+
       let nextBlockPos = bodyPos
       let paraText = ''
       while (nextBlockPos < bodyText.length) {
         const sub = bodyText.substring(nextBlockPos)
-        if (sub.match(/^\n\s*\n/) || sub.startsWith('\\par') || 
-            sub.match(/^\\(section|subsection|subsubsection)\b/) || 
-            sub.match(/^\\begin\s*\{/) || 
-            sub.startsWith('\\maketitle') || 
-            sub.startsWith('\\tableofcontents') ||
-            sub.startsWith('$$') || 
-            sub.startsWith('\\[') ||
-            sub.startsWith('\\end{document}')) {
+        if (sub.match(/^\n\s*\n/) || sub.startsWith('\\par') ||
+          sub.match(/^\\(section|subsection|subsubsection)\b/) ||
+          sub.match(/^\\begin\s*\{/) ||
+          sub.startsWith('\\maketitle') ||
+          sub.startsWith('\\tableofcontents') ||
+          sub.startsWith('$$') ||
+          sub.startsWith('\\[') ||
+          sub.startsWith('\\end{document}')) {
           break
         }
         paraText += bodyText[nextBlockPos]
         nextBlockPos++
       }
-      
+
       if (bodyText.substring(nextBlockPos).startsWith('\\par')) {
         nextBlockPos += 4
       }
-      
+
       if (paraText.trim() !== '') {
         blocks.push({ type: 'paragraph', line: lineNum, content: paraText })
       }
-      
+
       // Safety check to ensure we always advance the position
       if (nextBlockPos === bodyPos) {
         bodyPos++
@@ -414,7 +422,7 @@ class LaTeXCompiler {
         bodyPos = nextBlockPos
       }
     }
-    
+
     return blocks
   }
 
@@ -453,7 +461,7 @@ class LaTeXCompiler {
   renderInline(text, lineNum) {
     let pos = 0
     let html = ''
-    
+
     while (pos < text.length) {
       if (text[pos] === '$') {
         let endMath = text.indexOf('$', pos + 1)
@@ -487,7 +495,7 @@ class LaTeXCompiler {
         if (cmdMatch) {
           let cmd = cmdMatch[1]
           let cmdLen = cmdMatch[0].length
-          
+
           if (['textbf', 'textit', 'underline', 'emph', 'ref', 'cite', 'footnote', 'texttt', 'hspace', 'vspace', 'textsf'].includes(cmd)) {
             let argStart = pos + cmdLen
             while (argStart < text.length && text[argStart] !== '{') argStart++
@@ -555,7 +563,7 @@ class LaTeXCompiler {
             pos += cmdLen
             continue
           }
-          
+
           // Fallback if parsing braces failed in any block above
           html += `\\${cmd}`
           pos += cmdLen
@@ -576,18 +584,18 @@ class LaTeXCompiler {
           continue
         }
       }
-      
+
       let nextPos = pos
       let textRun = ''
       while (nextPos < text.length && text[nextPos] !== '$' && text[nextPos] !== '\\') {
         textRun += text[nextPos]
         nextPos++
       }
-      
+
       html += `<span class="tex-text" data-source-line="${lineNum}">${textRun}</span>`
       pos = nextPos
     }
-    
+
     return html
   }
 
@@ -595,19 +603,19 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-title-block'
     el.dataset.sourceLine = block.line
-    
+
     const titleEl = document.createElement('h1')
     titleEl.className = 'latex-title'
     titleEl.innerHTML = this.renderInline(this.title, block.line)
     el.appendChild(titleEl)
-    
+
     if (this.author) {
       const authorEl = document.createElement('div')
       authorEl.className = 'latex-author'
       authorEl.innerHTML = this.renderInline(this.author, block.line)
       el.appendChild(authorEl)
     }
-    
+
     if (this.date) {
       const dateEl = document.createElement('div')
       dateEl.className = 'latex-date'
@@ -621,35 +629,35 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-toc'
     el.dataset.sourceLine = block.line
-    
+
     const heading = document.createElement('h2')
     heading.className = 'latex-toc-heading'
     heading.innerText = 'Contents'
     el.appendChild(heading)
-    
+
     const list = document.createElement('div')
     list.className = 'latex-toc-list'
-    
+
     this.outline.forEach(item => {
       const itemEl = document.createElement('div')
       const depth = item.type === 'section' ? 1 : item.type === 'subsection' ? 2 : 3
       itemEl.className = `latex-toc-item depth-${depth}`
-      
+
       itemEl.innerHTML = `
         <span class="toc-number">${item.number}</span>
         <span class="toc-title">${item.title}</span>
         <span class="toc-filler"></span>
         <span class="toc-page"></span>
       `
-      
+
       itemEl.addEventListener('click', (e) => {
         e.preventDefault()
         if (this.onRefClick) this.onRefClick(item.line)
       })
-      
+
       list.appendChild(itemEl)
     })
-    
+
     el.appendChild(list)
     return el
   }
@@ -658,12 +666,12 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-abstract'
     el.dataset.sourceLine = block.line
-    
+
     const heading = document.createElement('div')
     heading.className = 'latex-abstract-heading'
     heading.innerText = 'Abstract'
     el.appendChild(heading)
-    
+
     const content = document.createElement('p')
     content.className = 'latex-abstract-content'
     content.innerHTML = this.renderInline(block.content, block.line)
@@ -676,14 +684,14 @@ class LaTeXCompiler {
     const el = document.createElement(tag)
     el.className = `latex-${block.type}`
     el.dataset.sourceLine = block.line
-    
+
     const cleanTitle = block.content.replace(/\\label\s*\{[^}]*\}/g, '').trim()
-    
+
     const numSpan = document.createElement('span')
     numSpan.className = 'heading-number'
     numSpan.innerText = block.number + ' '
     el.appendChild(numSpan)
-    
+
     const textSpan = document.createElement('span')
     textSpan.className = 'heading-text'
     textSpan.innerHTML = this.renderInline(cleanTitle, block.line)
@@ -695,13 +703,13 @@ class LaTeXCompiler {
     const el = document.createElement('p')
     el.className = 'latex-paragraph'
     el.dataset.sourceLine = block.line
-    
+
     let content = block.content.trim()
     if (content.startsWith('\\noindent')) {
       el.style.textIndent = '0'
       content = content.replace(/^\\noindent\s*/, '')
     }
-    
+
     el.innerHTML = this.renderInline(content, block.line)
     return el
   }
@@ -710,18 +718,18 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-equation-block'
     el.dataset.sourceLine = block.line
-    
+
     let mathContent = block.content.replace(/\\label\s*\{[^}]*\}/g, '').trim()
     const mathWrapper = document.createElement('div')
     mathWrapper.className = 'latex-equation-math'
-    
+
     try {
       mathWrapper.innerHTML = katex.renderToString(mathContent, { displayMode: true, throwOnError: false })
     } catch (err) {
       mathWrapper.innerText = mathContent
     }
     el.appendChild(mathWrapper)
-    
+
     if (block.number) {
       const numEl = document.createElement('div')
       numEl.className = 'latex-equation-number'
@@ -747,13 +755,13 @@ class LaTeXCompiler {
     const el = document.createElement(tag)
     el.className = `latex-${block.envName}`
     el.dataset.sourceLine = block.line
-    
+
     const items = block.content.split(/\\item\b/)
     for (let i = 1; i < items.length; i++) {
       const li = document.createElement('li')
       li.className = 'latex-list-item'
       let itemContent = items[i].trim()
-      
+
       let customBulletMatch = itemContent.match(/^\[(.*?)\]/)
       if (customBulletMatch) {
         li.style.listStyleType = 'none'
@@ -763,7 +771,7 @@ class LaTeXCompiler {
         li.appendChild(bulletSpan)
         itemContent = itemContent.substring(customBulletMatch[0].length).trim()
       }
-      
+
       const contentSpan = document.createElement('span')
       contentSpan.innerHTML = this.renderInline(itemContent, block.line)
       li.appendChild(contentSpan)
@@ -776,24 +784,24 @@ class LaTeXCompiler {
     const el = document.createElement('dl')
     el.className = 'latex-description'
     el.dataset.sourceLine = block.line
-    
+
     const items = block.content.split(/\\item\b/)
     for (let i = 1; i < items.length; i++) {
       let itemContent = items[i].trim()
       let label = ''
       let desc = itemContent
-      
+
       let labelMatch = itemContent.match(/^\[(.*?)\]/)
       if (labelMatch) {
         label = labelMatch[1]
         desc = itemContent.substring(labelMatch[0].length).trim()
       }
-      
+
       const dt = document.createElement('dt')
       dt.className = 'latex-desc-term'
       dt.innerHTML = this.renderInline(label, block.line)
       el.appendChild(dt)
-      
+
       const dd = document.createElement('dd')
       dd.className = 'latex-desc-details'
       dd.innerHTML = this.renderInline(desc, block.line)
@@ -806,15 +814,15 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-figure'
     el.dataset.sourceLine = block.line
-    
+
     const imgRegex = /\\includegraphics\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/
     const imgMatch = imgRegex.exec(block.content)
     const imgPath = imgMatch ? imgMatch[1] : 'example-image'
-    
+
     const captionRegex = /\\caption\s*\{((?:[^{}]|\{[^{}]*\})*)\}/
     const captionMatch = captionRegex.exec(block.content)
     const captionText = captionMatch ? captionMatch[1] : ''
-    
+
     const placeholder = document.createElement('div')
     placeholder.className = 'latex-figure-placeholder'
     placeholder.innerHTML = `
@@ -826,7 +834,7 @@ class LaTeXCompiler {
       <span class="figure-path">${imgPath}</span>
     `
     el.appendChild(placeholder)
-    
+
     if (captionText) {
       const captionEl = document.createElement('div')
       captionEl.className = 'latex-figure-caption'
@@ -840,21 +848,21 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-table-container'
     el.dataset.sourceLine = block.line
-    
+
     const captionRegex = /\\caption\s*\{((?:[^{}]|\{[^{}]*\})*)\}/
     const captionMatch = captionRegex.exec(block.content)
     const captionText = captionMatch ? captionMatch[1] : ''
-    
+
     const tabularRegex = /\\begin\s*\{tabular\}\s*\{([^}]+)\}([\s\S]*?)\\end\s*\{tabular\}/
     const tabMatch = tabularRegex.exec(block.content)
-    
+
     if (tabMatch) {
       const colsSpec = tabMatch[1]
       const tabContent = tabMatch[2]
-      
+
       const table = document.createElement('table')
       table.className = 'latex-table'
-      
+
       const colStyles = []
       let borderLeft = false
       for (let char of colsSpec) {
@@ -868,23 +876,23 @@ class LaTeXCompiler {
           borderLeft = false
         }
       }
-      
+
       const rawRows = tabContent.split('\\\\')
       const tbody = document.createElement('tbody')
-      
+
       let nextRowHline = false
       for (let rawRow of rawRows) {
         rawRow = rawRow.trim()
         if (rawRow === '') continue
-        
+
         if (rawRow === '\\hline') {
           nextRowHline = true
           continue
         }
-        
+
         let rowHlineBefore = nextRowHline
         nextRowHline = false
-        
+
         if (rawRow.startsWith('\\hline')) {
           rowHlineBefore = true
           rawRow = rawRow.replace(/^\\hline\s*/, '')
@@ -893,18 +901,18 @@ class LaTeXCompiler {
           nextRowHline = true
           rawRow = rawRow.replace(/\s*\\hline$/, '')
         }
-        
+
         const tr = document.createElement('tr')
         if (rowHlineBefore) {
           tr.className = 'border-top'
         }
-        
+
         const cells = rawRow.split('&')
         for (let i = 0; i < cells.length; i++) {
           const td = document.createElement('td')
           const cellText = cells[i].trim()
           td.innerHTML = this.renderInline(cellText, block.line)
-          
+
           const spec = colStyles[i] || { align: 'left', borderLeft: false }
           td.style.textAlign = spec.align
           if (spec.borderLeft) {
@@ -931,34 +939,34 @@ class LaTeXCompiler {
     const el = document.createElement('div')
     el.className = 'latex-bibliography'
     el.dataset.sourceLine = block.line
-    
+
     const heading = document.createElement('h2')
     heading.className = 'latex-bibliography-heading'
     heading.innerText = 'References'
     el.appendChild(heading)
-    
+
     const list = document.createElement('ul')
     list.className = 'latex-bib-list'
-    
+
     const bibItems = block.content.split(/\\bibitem\s*\{([^}]+)\}/)
     let idx = 1
     for (let i = 1; i < bibItems.length; i += 2) {
       const key = bibItems[i]
-      const desc = bibItems[i+1].trim()
-      
+      const desc = bibItems[i + 1].trim()
+
       const li = document.createElement('li')
       li.className = 'latex-bib-item'
       li.id = `bib-${key}`
-      
+
       const label = document.createElement('span')
       label.className = 'bib-label'
       label.innerText = `[${idx}] `
       li.appendChild(label)
-      
+
       const text = document.createElement('span')
       text.innerHTML = this.renderInline(desc, block.line)
       li.appendChild(text)
-      
+
       list.appendChild(li)
       idx++
     }
@@ -986,17 +994,17 @@ class LaTeXCompiler {
     // Parse \node[opts] at (x,y) {content};
     const nodeRegex = /\\node\[(.*?)\]\s*at\s*\(([^,]+),([^)]+)\)\s*\{([\s\S]*?)\};/g
     let match
-    
+
     // Scale factor since LaTeX bp (big points) are 1/72 inch, same as CSS pt or px depending on DPI
     // But PyMuPDF coordinates might need a generic scaling. We'll use absolute px.
-    const scale = 1.0 
+    const scale = 1.0
 
     while ((match = nodeRegex.exec(block.content)) !== null) {
       const optsStr = match[1]
       const x = parseFloat(match[2])
       const y = parseFloat(match[3])
       const content = match[4]
-      
+
       // Calculate approximate line number of this node within the block content
       const contentBefore = block.content.substring(0, match.index)
       const localLine = contentBefore.split('\\n').length - 1
@@ -1008,7 +1016,7 @@ class LaTeXCompiler {
       nodeDiv.style.position = 'absolute'
       nodeDiv.style.left = `${x * scale}px`
       nodeDiv.style.top = `${y * scale}px`
-      
+
       // Parse options like text width
       if (optsStr.includes('text width=')) {
         const widthMatch = optsStr.match(/text width=([\d.]+)bp/)
@@ -1023,11 +1031,11 @@ class LaTeXCompiler {
         if (imgMatch) {
           const imgOpts = imgMatch[1]
           const imgSrc = imgMatch[2]
-          
+
           let w = 'auto', h = 'auto'
           if (imgOpts.includes('width=')) w = imgOpts.match(/width=([\d.]+)bp/)?.[1] + 'px'
           if (imgOpts.includes('height=')) h = imgOpts.match(/height=([\d.]+)bp/)?.[1] + 'px'
-          
+
           nodeDiv.innerHTML = `<img src="/api/outputs/images/${imgSrc.split('/').pop()}" style="width:${w}; height:${h};" alt="extracted image" />`
         }
       } else {
@@ -1035,9 +1043,9 @@ class LaTeXCompiler {
         nodeDiv.contentEditable = "true"
         nodeDiv.style.cursor = "text"
         nodeDiv.style.outline = "none"
-        
+
         let innerText = content.trim()
-        
+
         // Strip outer braces if present (e.g., from fallback spans)
         if (innerText.startsWith('{') && innerText.endsWith('}')) {
           innerText = innerText.substring(1, innerText.length - 1).trim()
@@ -1048,7 +1056,7 @@ class LaTeXCompiler {
         if (tcMatch) {
           nodeDiv.style.color = '#' + tcMatch[1]
         }
-        
+
         // Find the FIRST font size to apply to the div
         const fsMatch = innerText.match(/\\fontsize\{([\d.]+)bp\}\{[\d.]+bp\}\\selectfont/)
         if (fsMatch) {
@@ -1059,13 +1067,13 @@ class LaTeXCompiler {
         // Now STRIP ALL raw latex font formatting from innerText so it doesn't clutter the view!
         innerText = innerText.replace(/\\textcolor\[HTML\]\{[A-Fa-f0-9]+\}\s*\{/g, '')
         innerText = innerText.replace(/\\fontsize\{[\d.]+bp\}\{[\d.]+bp\}\\selectfont\s*/g, '')
-        
+
         // Clean up dangling braces that were left behind by stripping the opening \textcolor{
         innerText = innerText.replace(/^\{+/, '').replace(/\}+$/, '').trim()
-        
+
         // Also remove braces from \textbf{} etc if any (optional, but renderInline handles it partially)
         nodeDiv.innerHTML = this.renderInline(innerText, actualLineNum)
-        
+
         // Add special class to bind events later
         nodeDiv.classList.add('tikz-editable-text')
       }
@@ -1080,7 +1088,7 @@ class LaTeXCompiler {
     this.preScan()
     const blocks = this.parseBlocks()
     this.processStructure(blocks)
-    
+
     const renderedElements = []
     for (let block of blocks) {
       let node
@@ -1124,7 +1132,7 @@ class LaTeXCompiler {
         renderedElements.push(node)
       }
     }
-    
+
     this.errors = this.checkErrors(this.source)
     return {
       elements: renderedElements,
@@ -1137,12 +1145,12 @@ class LaTeXCompiler {
   checkErrors(text) {
     const errors = []
     const cleanText = this.cleanText
-    
+
     const braceStack = []
     for (let i = 0; i < cleanText.length; i++) {
-      if (cleanText[i] === '{' && (i === 0 || cleanText[i-1] !== '\\')) {
+      if (cleanText[i] === '{' && (i === 0 || cleanText[i - 1] !== '\\')) {
         braceStack.push({ pos: i, line: this.getLineNum(i) })
-      } else if (cleanText[i] === '}' && (i === 0 || cleanText[i-1] !== '\\')) {
+      } else if (cleanText[i] === '}' && (i === 0 || cleanText[i - 1] !== '\\')) {
         if (braceStack.length === 0) {
           errors.push({
             line: this.getLineNum(i),
@@ -1165,7 +1173,7 @@ class LaTeXCompiler {
         to: open.pos + 1
       })
     }
-    
+
     const envStack = []
     const envRegex = /\\(begin|end)\s*\{([^}]+)\}/g
     let match
@@ -1175,7 +1183,7 @@ class LaTeXCompiler {
       const line = this.getLineNum(match.index)
       const startPos = match.index
       const endPos = match.index + match[0].length
-      
+
       if (type === 'begin') {
         envStack.push({ name: envName, pos: startPos, line: line })
       } else {
@@ -1210,7 +1218,7 @@ class LaTeXCompiler {
         to: unclosed.pos + 12
       })
     }
-    
+
     const emptyArgRegex = /\\(section|subsection|subsubsection|ref|cite|footnote)\s*\{\s*\}/g
     while ((match = emptyArgRegex.exec(cleanText)) !== null) {
       errors.push({
@@ -1249,7 +1257,7 @@ class LaTeXCompiler {
         })
       }
     }
-    
+
     return errors
   }
 }
@@ -1378,7 +1386,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
   const [errors, setErrors] = useState([])
   const [stats, setStats] = useState({ words: 0, chars: 0, lines: 0, sections: 0, equations: 0, tables: 0, figures: 0 })
   const [isStatsOpen, setIsStatsOpen] = useState(false)
-  
+
   // Search state
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -1426,20 +1434,53 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
   const lastActiveBlockRef = useRef(null)
   const documentDirtyRef = useRef(false)
   const backendSyncTimerRef = useRef(null)
+  const lastTargetPageRef = useRef(1)
+
+  // Trackpad pinch / Ctrl+Scroll zoom handler
+  useEffect(() => {
+    const pane = pdfViewerPaneRef.current;
+    if (!pane) return;
+
+    const handleWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault(); // Prevent browser default zoom
+        
+        // Scale deltaY for smoother, proportional zooming
+        // Multiplier adjusted based on user feedback to be more responsive
+        const zoomDelta = e.deltaY * -0.20; 
+        
+        setZoom(prev => Math.min(300, Math.max(30, prev + zoomDelta)));
+      }
+    };
+
+    pane.addEventListener('wheel', handleWheel, { passive: false });
+    return () => pane.removeEventListener('wheel', handleWheel);
+  }, []);
 
   // 1. Initialize CodeMirror
   useEffect(() => {
     if (!editorContainerRef.current) return
 
     const latexLanguage = StreamLanguage.define(stex)
-    
+
     const themeConfig = EditorView.theme({
       "&": { height: "100%" },
       ".cm-scroller": { overflow: "auto" }
     })
 
+    // Crash recovery: check if we have unsaved local edits for this job
+    let initialDoc = code || '';
+    if (jobId) {
+      const recovery = localStorage.getItem(`latex-recovery-${jobId}`);
+      if (recovery && recovery !== code) {
+        initialDoc = recovery;
+        onCodeChange?.(recovery);
+        documentDirtyRef.current = true; // Mark as dirty since it's not saved to backend yet
+      }
+    }
+
     const startState = EditorState.create({
-      doc: code || '',
+      doc: initialDoc,
       extensions: [
         themeConfig,
         lineNumbers(),
@@ -1454,33 +1495,36 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
         ]),
         history(),
         latexLanguage,
-        
+
         highlightField,
         greenFlashField,
         searchField,
         hoverLineField,
         hoverGutter,
-        
+
         lintGutter(),
-        
+
         EditorView.updateListener.of((update) => {
           if (update.selectionSet) {
             const pos = update.state.selection.main.head
             const line = update.state.doc.lineAt(pos)
             const col = pos - line.from + 1
             setCursorPos({ line: line.number, col })
-            
+
             // Highlight active outline item
             setActiveOutlineLine(line.number)
-            
+
             // Trigger forward scroll
             syncCodeToPdf(line.number)
           }
-          
+
           if (update.docChanged) {
             documentDirtyRef.current = true
             const newCode = update.state.doc.toString()
             onCodeChange?.(newCode)
+            if (jobId) {
+              localStorage.setItem(`latex-recovery-${jobId}`, newCode)
+            }
           }
         })
       ]
@@ -1516,32 +1560,17 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
     }
   }, [zoom])
 
-  // The 2s localStorage sync was removed in favor of backend database sync
-
-  // Backend sync (every 30s)
+  // Warn before closing tab with unsaved changes
   useEffect(() => {
-    if (!jobId || !saveToBackend) return
-    backendSyncTimerRef.current = setInterval(async () => {
-      if (editorViewRef.current) {
-        const source = editorViewRef.current.state.doc.toString()
-        const pos = editorViewRef.current.state.selection.main.head
-        const line = editorViewRef.current.state.doc.lineAt(pos)
-        const scrollPos = pdfViewerPaneRef.current?.scrollTop || 0
-        setSaveStatus('saving')
-        const success = await saveToBackend(jobId, source, line.number, pos - line.from + 1, scrollPos)
-        if (success) {
-          setSaveStatus('saved')
-          setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
-        } else {
-          setSaveStatus('error')
-        }
-        setTimeout(() => setSaveStatus(''), 2000)
+    const handleBeforeUnload = (e) => {
+      if (documentDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
       }
-    }, 10000)
-    return () => {
-      if (backendSyncTimerRef.current) clearInterval(backendSyncTimerRef.current)
-    }
-  }, [jobId, saveToBackend])
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   // Explicit save handler
   const handleExplicitSave = useCallback(async () => {
@@ -1555,6 +1584,8 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
     if (success) {
       setSaveStatus('saved')
       setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      documentDirtyRef.current = false // Mark as clean
+      localStorage.removeItem(`latex-recovery-${jobId}`) // Clear recovery since it's saved
     } else {
       setSaveStatus('error')
     }
@@ -1603,9 +1634,9 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
       scrollIntoView: true,
       effects: [highlightLineEffect.of(lineNum)]
     })
-    
+
     editor.focus()
-    
+
     setTimeout(() => {
       editor.dispatch({
         effects: [clearHighlightEffect.of()]
@@ -1616,10 +1647,10 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
   // Compilation & Pagination Engine
   const compileLatex = useCallback(() => {
     if (!editorViewRef.current) return
-    
+
     setCompileStatus('Compiling')
     const text = editorViewRef.current.state.doc.toString()
-    
+
     // Proximity Scroll Preservation: Save reading position
     const savedPos = getTopmostVisibleSourceLine()
 
@@ -1627,7 +1658,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
       // Compiler Run
       const compiler = new LaTeXCompiler(text, (line) => highlightLine(line))
       const res = compiler.compile()
-      
+
       compiledBlocksRef.current = compiler.parseBlocks()
       setOutline(res.outline)
       setErrors(res.errors)
@@ -1656,7 +1687,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
       } else {
         setCompileStatus('Ready')
       }
-      
+
       const now = new Date()
       setCompileTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
 
@@ -1668,46 +1699,46 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ latex_code: text })
         })
-        .then(response => {
-          if (!response.ok) throw new Error('Backend compilation failed')
-          return response.blob()
-        })
-        .then(blob => {
-          setPdfPreviewUrl(prev => {
-            if (prev) URL.revokeObjectURL(prev)
-            return URL.createObjectURL(blob)
+          .then(response => {
+            if (!response.ok) throw new Error('Backend compilation failed')
+            return response.blob()
           })
-          // Also fetch the updated page count to render imagery
-          return fetch(`/api/export/preview-compiled/count/${jobId}`)
-        })
-        .then(res => {
-          if (res) return res.json()
-        })
-        .then(data => {
-          if (data) {
-            setCompiledPageCount(data.count)
-            setCompileTimestamp(Date.now())
-          }
-          setIsBackendCompiling(false)
-        })
-        .catch(err => {
-          console.error('Backend compilation failed, trying fallback images:', err)
-          // Fallback: still try to fetch page count so we can show original PDF images
-          fetch(`/api/export/preview-compiled/count/${jobId}`)
-            .then(res => res.json())
-            .then(data => {
+          .then(blob => {
+            setPdfPreviewUrl(prev => {
+              if (prev) URL.revokeObjectURL(prev)
+              return URL.createObjectURL(blob)
+            })
+            // Also fetch the updated page count to render imagery
+            return fetch(`/api/export/preview-compiled/count/${jobId}`)
+          })
+          .then(res => {
+            if (res) return res.json()
+          })
+          .then(data => {
+            if (data) {
               setCompiledPageCount(data.count)
               setCompileTimestamp(Date.now())
-              setIsBackendCompiling(false)
-            })
-            .catch(() => setIsBackendCompiling(false))
-        })
+            }
+            setIsBackendCompiling(false)
+          })
+          .catch(err => {
+            console.error('Backend compilation failed, trying fallback images:', err)
+            // Fallback: still try to fetch page count so we can show original PDF images
+            fetch(`/api/export/preview-compiled/count/${jobId}`)
+              .then(res => res.json())
+              .then(data => {
+                setCompiledPageCount(data.count)
+                setCompileTimestamp(Date.now())
+                setIsBackendCompiling(false)
+              })
+              .catch(() => setIsBackendCompiling(false))
+          })
       }
     } catch (error) {
       console.error('LaTeX compilation failed:', error)
       setCompileStatus('Error')
       setErrors([{ line: 1, from: 0, to: 0, message: (error.stack || error.message || 'Fatal compilation error').substring(0, 200), severity: 'error' }])
-      
+
       const now = new Date()
       setCompileTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     }
@@ -1744,7 +1775,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
     const onMouseDown = (e) => {
       const startX = e.clientX
       const startWidth = leftPane.getBoundingClientRect().width
-      
+
       const onMouseMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX
         const totalWidth = leftPane.parentElement.getBoundingClientRect().width
@@ -1754,7 +1785,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
           localStorage.setItem('latex-editor-divider-pos', `${newPercent}%`)
         }
       }
-      
+
       const onMouseUp = () => {
         document.removeEventListener('mousemove', onMouseMove)
         document.removeEventListener('mouseup', onMouseUp)
@@ -1781,19 +1812,19 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
     const editor = editorViewRef.current
     if (!editor) return
     const text = editor.state.doc.toString()
-    
+
     // Formatter implementation
     const lines = text.split('\n')
     let indentLevel = 0
     const indentWidth = 2
     const formattedLines = []
-    
+
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i].trim()
       if (line.match(/^\\end\s*\{/)) {
         indentLevel = Math.max(0, indentLevel - 1)
       }
-      
+
       const indentStr = ' '.repeat(indentLevel * indentWidth)
       if (line === '') {
         formattedLines.push('')
@@ -1821,7 +1852,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
           formattedLines.push(indentedLine)
         }
       }
-      
+
       if (line.match(/^\\begin\s*\{/)) {
         indentLevel++
       }
@@ -1860,17 +1891,16 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
   useEffect(() => {
     const view = editorViewRef.current
     if (!view) return
-    
+
     const diagnostics = errors.map(err => ({
       from: err.from,
       to: err.to,
       severity: err.severity,
       message: err.message
     }))
-    
+
     view.dispatch(setDiagnostics(view.state, diagnostics))
   }, [errors])
-
 
 
   // Scroll Helpers
@@ -1904,212 +1934,99 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
 
   // FORWARD SYNC
   const syncCodeToPdf = (lineNum) => {
-    let bestBlock = null
-    for (let block of compiledBlocksRef.current) {
-      if (block.line <= lineNum) {
-        if (!bestBlock || block.line > bestBlock.line) {
-          bestBlock = block
-        }
-      }
-    }
-    
-    if (bestBlock && bestBlock !== lastActiveBlockRef.current) {
-      lastActiveBlockRef.current = bestBlock
-      const target = pdfPagesContainerRef.current?.querySelector(`[data-source-line="${bestBlock.line}"]`)
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        target.classList.remove('pdf-highlight-flash')
-        void target.offsetWidth 
-        target.classList.add('pdf-highlight-flash')
+    if (!editorViewRef.current || compiledPageCount <= 0 || !pdfPreviewUrl) return;
+
+    const totalLines = editorViewRef.current.state.doc.lines;
+    const proportion = Math.min(Math.max(lineNum / totalLines, 0), 1);
+    const targetPage = Math.max(1, Math.ceil(proportion * compiledPageCount));
+
+    if (targetPage !== lastTargetPageRef.current) {
+      lastTargetPageRef.current = targetPage;
+      const pageEl = document.getElementById(`pdf-page-${targetPage}`);
+      if (pageEl) {
+        pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
   }
 
-  // INVERSE SYNC / HOVER & EDIT MOUSE EVENTS
-  const attachPdfEvents = () => {
-    const tooltip = tooltipRef.current
-    const viewer = pdfViewerPaneRef.current
-    const editor = editorViewRef.current
-    if (!viewer || !editor) return
-
-    // Hover chevrons
-    const hoverElements = viewer.querySelectorAll('[data-source-line]')
-    hoverElements.forEach(el => {
-      el.addEventListener('mousemove', (e) => {
-        e.stopPropagation()
-        const lineNum = parseInt(el.getAttribute('data-source-line'))
-        
-        if (tooltip) {
-          tooltip.innerText = `Line ${lineNum}`
-          tooltip.style.left = (e.clientX + 15) + 'px'
-          tooltip.style.top = (e.clientY + 15) + 'px'
-          tooltip.style.display = 'block'
-        }
-        
-        editor.dispatch({ effects: [setHoverLineEffect.of(lineNum)] })
-      })
+  // INVERSE SYNC (PDF to Code)
+  const handlePdfClick = async (e, pageNum) => {
+    // 1. Client-Side Text Matching (Fallback/Fast Path)
+    // If the user clicks on a text layer element, try to find that text in the editor
+    const target = e.target;
+    if (target && target.tagName && target.tagName.toLowerCase() === 'span' && target.closest('.react-pdf__Page__textContent')) {
+      const clickedText = target.textContent.trim();
+      const editor = editorViewRef.current;
       
-      el.addEventListener('mouseleave', () => {
-        if (tooltip) tooltip.style.display = 'none'
-        editor.dispatch({ effects: [clearHoverLineEffect.of()] })
-      })
+      if (editor && clickedText.length >= 2) {
+        const docText = editor.state.doc.toString();
+        let foundLine = -1;
 
-      // Single Click Sync
-      el.addEventListener('click', (e) => {
-        if (el.isContentEditable) return
-        e.stopPropagation()
-        const lineNum = parseInt(el.getAttribute('data-source-line'))
-        highlightLine(lineNum)
-        
-        el.classList.add('pdf-click-active')
-        setTimeout(() => { el.classList.remove('pdf-click-active') }, 1500)
-      })
+        // Try exact match first
+        let idx = docText.indexOf(clickedText);
+        if (idx === -1) idx = docText.toLowerCase().indexOf(clickedText.toLowerCase());
 
-      // Double Click Edit
-      el.addEventListener('dblclick', (e) => {
-        const isInsideMath = el.closest('.katex') || el.closest('.latex-equation-block')
-        const isHeading = el.closest('h2') || el.closest('h3') || el.closest('h4')
-        const isFloat = el.closest('.latex-table-container') || el.closest('.latex-figure')
-        
-        if (isInsideMath || isHeading || isFloat) return
-        
-        e.preventDefault()
-        e.stopPropagation()
-        
-        const originalText = el.innerText
-        el.contentEditable = "true"
-        el.focus()
-        el.classList.add('inline-editing')
-        
-        let cancelled = false
+        if (idx !== -1) {
+          foundLine = editor.state.doc.lineAt(idx).number;
+        } else {
+          // Fuzzy match: find a line containing the most words from the clicked span
+          const words = clickedText.split(/\s+/).filter(w => w.length > 2);
+          if (words.length > 0) {
+            const lines = docText.split('\n');
+            let maxMatches = 0;
+            
+            for (let i = 0; i < lines.length; i++) {
+              const lineLower = lines[i].toLowerCase();
+              let matches = 0;
+              for (const word of words) {
+                if (lineLower.includes(word.toLowerCase())) {
+                  matches++;
+                }
+              }
+              if (matches > maxMatches && matches >= Math.min(2, words.length)) {
+                maxMatches = matches;
+                foundLine = i + 1;
+              }
+            }
+          }
+        }
 
-        const finishEdit = () => {
-          el.contentEditable = "false"
-          el.classList.remove('inline-editing')
+        if (foundLine !== -1) {
+          highlightLine(foundLine);
           
-          if (cancelled) {
-            el.innerText = originalText
-            return
-          }
-
-          const newText = el.innerText
-          if (originalText !== newText) {
-            const lineNum = parseInt(el.getAttribute('data-source-line'))
-            replaceTextInSource(originalText, newText, lineNum)
-          }
-        }
-        
-        el.addEventListener('blur', finishEdit, { once: true })
-        
-        el.addEventListener('keydown', (evt) => {
-          if (evt.key === 'Enter') {
-            evt.preventDefault()
-            el.blur()
-          }
-          if (evt.key === 'Escape') {
-            cancelled = true
-            evt.preventDefault()
-            el.blur()
-          }
-        })
-      })
-    })
-
-    // Inline citations and references navigation
-    viewer.querySelectorAll('.pdf-ref').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        const key = link.dataset.ref
-        const text = editor.state.doc.toString()
-        const target = `\\label{${key}}`
-        const idx = text.indexOf(target)
-        if (idx !== -1) {
-          highlightLine(editor.state.doc.lineAt(idx).number)
-        }
-      })
-    })
-    
-    viewer.querySelectorAll('.pdf-cite').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        const key = link.dataset.cite
-        const text = editor.state.doc.toString()
-        const target = `\\bibitem{${key}}`
-        const idx = text.indexOf(target)
-        if (idx !== -1) {
-          highlightLine(editor.state.doc.lineAt(idx).number)
-        }
-      })
-    })
-  }
-
-  // Backwards fuzzy replace
-  const replaceTextInSource = (oldText, newText, lineNum) => {
-    const editor = editorViewRef.current
-    if (!editor) return
-    const doc = editor.state.doc
-    const numLines = doc.lines
-    const radius = 5
-    const start = Math.max(1, lineNum - radius)
-    const end = Math.min(numLines, lineNum + radius)
-    
-    const cleanStr = (s) => s.replace(/\s+/g, ' ').trim()
-    const cleanedOld = cleanStr(oldText)
-    if (!cleanedOld) return
-
-    for (let offset = 0; offset <= radius; offset++) {
-      const linesToCheck = []
-      if (lineNum - offset >= start) linesToCheck.push(lineNum - offset)
-      if (offset > 0 && lineNum + offset <= end) linesToCheck.push(lineNum + offset)
-      
-      for (let l of linesToCheck) {
-        const lineText = doc.line(l).text
-        
-        let idx = lineText.indexOf(oldText)
-        if (idx !== -1) {
-          const startPos = doc.line(l).from + idx
-          editor.dispatch({
-            changes: { from: startPos, to: startPos + oldText.length, insert: newText }
-          })
-          compileLatex()
-          return
-        }
-        
-        const cleanedLine = cleanStr(lineText)
-        if (cleanedLine.indexOf(cleanedOld) !== -1) {
-          const words = oldText.split(/\s+/).filter(w => w.length > 0)
-          let firstWord = words[0]
-          let lastWord = words[words.length - 1]
-          let firstIdx = lineText.indexOf(firstWord)
-          let lastIdx = lineText.indexOf(lastWord, firstIdx)
+          // Flash the clicked word in the PDF for visual feedback
+          target.classList.add('pdf-highlight-flash');
+          setTimeout(() => target.classList.remove('pdf-highlight-flash'), 800);
           
-          if (firstIdx !== -1 && lastIdx !== -1) {
-            const startPos = doc.line(l).from + firstIdx
-            const endPos = doc.line(l).from + lastIdx + lastWord.length
-            editor.dispatch({
-              changes: { from: startPos, to: endPos, insert: newText }
-            })
-            compileLatex()
-            return
-          }
+          // If we found it purely by text, we can return early to save a backend call.
+          // However, we'll still let SyncTeX run in the background if they want exact precision,
+          // but we can just return here to make it instant!
+          return;
         }
       }
     }
 
-    // Global Fallback search
-    for (let l = 1; l <= numLines; l++) {
-      const lineText = doc.line(l).text
-      let idx = lineText.indexOf(oldText)
-      if (idx !== -1) {
-        const startPos = doc.line(l).from + idx
-        editor.dispatch({
-          changes: { from: startPos, to: startPos + oldText.length, insert: newText }
-        })
-        compileLatex()
-        return
+    // 2. Exact SyncTeX Coordinate Mapping (Fallback if text not found or clicking image/blank space)
+    const pageEl = e.currentTarget;
+    const rect = pageEl.getBoundingClientRect();
+
+    // Scale correction: react-pdf scales the page to match `width` prop.
+    const origW = parseFloat(pageEl.dataset.originalWidth || 595.28);
+    const scale = rect.width / origW;
+
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+
+    try {
+      const res = await fetch(`/api/export/synctex/${jobId}?page=${pageNum}&x=${x}&y=${y}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.line && editorViewRef.current) {
+          highlightLine(data.line);
+        }
       }
+    } catch (err) {
+      console.error('Inverse SyncTeX failed:', err);
     }
   }
 
@@ -2137,15 +2054,15 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
   }, [])
 
   // Command palette search items
-  const filteredSnippets = SNIPPETS.filter(item => 
-    item.name.toLowerCase().includes(paletteSearch.toLowerCase()) || 
+  const filteredSnippets = SNIPPETS.filter(item =>
+    item.name.toLowerCase().includes(paletteSearch.toLowerCase()) ||
     item.desc.toLowerCase().includes(paletteSearch.toLowerCase())
   )
 
   const insertSnippet = (snippet) => {
     const editor = editorViewRef.current
     if (!editor) return
-    
+
     const selection = editor.state.selection.main
     editor.dispatch({
       changes: { from: selection.from, to: selection.to, insert: snippet.code },
@@ -2203,7 +2120,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
           idx = targetText.indexOf(searchStr, idx + searchStr.length)
         }
       }
-    } catch (err) {}
+    } catch (err) { }
 
     setSearchMatches(matches)
     let activeIdx = -1
@@ -2246,7 +2163,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
     editor.dispatch({
       changes: { from: match.from, to: match.to, insert: replaceQuery }
     })
-    
+
     // Re-run search after edits
     setTimeout(() => {
       performSearch()
@@ -2271,28 +2188,20 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      
+
       {/* Top Navigation Toolbar */}
       <header className="live-editor-toolbar">
         <div className="live-editor-toolbar-left">
-          <button 
-            className={`le-btn-icon ${onReset ? '' : 'disabled'}`} 
-            onClick={onReset} 
+          <button
+            className={`le-btn-icon ${onReset ? '' : 'disabled'}`}
+            onClick={onReset}
             title="Reset and upload another file"
             style={{ marginRight: '6px' }}
           >
             <RefreshIcon size={16} />
           </button>
-          
-          <button 
-            className={`le-btn-icon ${isOutlineCollapsed ? '' : 'active'}`} 
-            onClick={() => setIsOutlineCollapsed(!isOutlineCollapsed)}
-            title="Toggle Outline Side Panel"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
+
+
 
           <div className="live-editor-app-title">
             LaTeX <span>Studio</span>
@@ -2300,14 +2209,14 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
 
           <button className="le-btn" onClick={compileLatex} title="Compile Document (Ctrl+Enter)">
             {compileStatus === 'Compiling' && (
-              <span style={{ 
-                width: '12px', 
-                height: '12px', 
-                border: '2px solid #fff', 
-                borderTop: '2px solid transparent', 
-                borderRadius: '50%', 
-                animation: 'spin-slow 1s linear infinite', 
-                marginRight: '4px' 
+              <span style={{
+                width: '12px',
+                height: '12px',
+                border: '2px solid #fff',
+                borderTop: '2px solid transparent',
+                borderRadius: '50%',
+                animation: 'spin-slow 1s linear infinite',
+                marginRight: '4px'
               }}></span>
             )}
             {compileStatus === 'Compiling' ? 'Compiling' : 'Compile'}
@@ -2321,18 +2230,8 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
             <span>{autoCompile ? 'Auto: ON' : 'Auto: OFF'}</span>
           </div>
         </div>
-        
+
         <div className="live-editor-toolbar-middle">
-          <button className="le-btn-icon" onClick={() => setZoom(prev => Math.max(60, prev - 15))} title="Zoom Out">-</button>
-          <select className="le-zoom-select" value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))}>
-            <option value="60">60%</option>
-            <option value="75">75%</option>
-            <option value="100">100%</option>
-            <option value="125">125%</option>
-            <option value="150">150%</option>
-            <option value="200">200%</option>
-          </select>
-          <button className="le-btn-icon" onClick={() => setZoom(prev => Math.min(200, prev + 15))} title="Zoom In">+</button>
         </div>
 
         <div className="live-editor-toolbar-right">
@@ -2345,10 +2244,10 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
               <><DownloadIcon size={14} /> Save</>
             )}
           </button>
-          <button 
-            className="le-btn le-btn-pdf" 
-            onClick={handleDownloadPdf} 
-            title="Compile & download PDF" 
+          <button
+            className="le-btn le-btn-pdf"
+            onClick={handleDownloadPdf}
+            title="Compile & download PDF"
             disabled={isDownloadingPdf || !jobId}
           >
             {isDownloadingPdf ? (
@@ -2357,16 +2256,16 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
               <><PdfIcon size={14} /> Download PDF</>
             )}
           </button>
-          <button 
-            className="le-btn le-btn-docx" 
-            onClick={handleDownloadDocx} 
-            title="Convert & download Word (.docx)" 
+          <button
+            className="le-btn le-btn-docx"
+            onClick={handleDownloadDocx}
+            title="Convert & download Word (.docx)"
             disabled={isDownloadingDocx || !jobId}
           >
             {isDownloadingDocx ? (
               <><span className="btn-spinner"></span> Converting...</>
             ) : (
-              <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Download DOCX</>
+              <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg> Download DOCX</>
             )}
           </button>
           <div className="le-toolbar-separator"></div>
@@ -2382,42 +2281,19 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
 
       {/* Main Workspace Split Pane */}
       <main className="editor-main-container">
-        
-        {/* Outline Sidebar */}
-        <div className={`outline-panel ${isOutlineCollapsed ? 'collapsed' : ''}`}>
-          <div className="outline-header">Document Sections</div>
-          <div className="outline-content">
-            {outline.length === 0 ? (
-              <div className="outline-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No sections defined</div>
-            ) : (
-              outline.map((item, idx) => {
-                const depth = item.type === 'section' ? 1 : item.type === 'subsection' ? 2 : 3
-                const isActive = activeOutlineLine >= item.line && (idx === outline.length - 1 || outline[idx + 1].line > activeOutlineLine)
-                
-                return (
-                  <div 
-                    key={idx}
-                    className={`outline-item sec-${depth} ${isActive ? 'active' : ''}`}
-                    onClick={() => highlightLine(item.line)}
-                  >
-                    {item.number} {item.title}
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
+
+
 
         {/* Code Editor Pane (Left Side) */}
         <div ref={leftPaneRef} className="editor-pane" style={{ width: '50%' }}>
-          
+
           {/* Find & Replace Panel */}
           <div className={`search-replace-panel ${isSearchOpen ? '' : 'collapsed'}`}>
             <div className="search-row">
-              <input 
-                type="text" 
-                className="search-input" 
-                placeholder="Search..." 
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && performSearch()}
@@ -2436,10 +2312,10 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
               <button className="le-btn-icon" style={{ padding: '4px 8px', border: 'none' }} onClick={() => { setIsSearchOpen(false); setSearchMatches([]); }} title="Close find panel">&times;</button>
             </div>
             <div className="replace-row">
-              <input 
-                type="text" 
-                className="search-input" 
-                placeholder="Replace with..." 
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Replace with..."
                 value={replaceQuery}
                 onChange={(e) => setReplaceQuery(e.target.value)}
               />
@@ -2450,7 +2326,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
 
           {/* CodeMirror DOM Parent */}
           <div ref={editorContainerRef} className="editor-container"></div>
-          
+
           {/* Diagnostic sliding console panel */}
           <div className={`error-console ${isConsoleCollapsed ? 'collapsed' : ''}`}>
             <div className="error-console-header">
@@ -2462,8 +2338,8 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No compilation issues found.</div>
               ) : (
                 errors.map((err, idx) => (
-                  <div 
-                    key={idx} 
+                  <div
+                    key={idx}
                     className={`error-item severity-${err.severity}`}
                     onClick={() => highlightLine(err.line)}
                   >
@@ -2482,44 +2358,89 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
 
 
         {/* Live Preview Pane (Right Side) */}
-        <div ref={pdfViewerPaneRef} className="preview-pane">
+        <div ref={pdfViewerPaneRef} className="preview-pane" style={{ position: 'relative' }}>
           
-          <div ref={pdfZoomWrapperRef} className="pdf-zoom-wrapper" style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-            <div className="doc-canvas" style={{ padding: 0, backgroundColor: 'transparent', boxShadow: 'none' }}>
-              {compiledPageCount > 0 ? (
-                Array.from({ length: compiledPageCount }).map((_, i) => (
-                  <img
-                    key={i}
-                    src={`/api/export/preview-compiled/${jobId}/${i}?t=${compileTimestamp}`}
-                    alt={`Page ${i + 1}`}
-                    style={{ 
-                      width: '100%', 
-                      display: 'block', 
-                      marginBottom: '24px', 
-                      boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
-                      borderRadius: '4px',
-                      backgroundColor: '#ffffff' 
+          {/* Doc-side Zoom Controls */}
+          {pdfPreviewUrl && (
+            <div style={{
+              position: 'absolute',
+              bottom: '24px',
+              right: '24px',
+              backgroundColor: 'var(--surface-color, rgba(30, 30, 30, 0.8))',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid var(--border-color, #444)',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              zIndex: 100
+            }}>
+              <button className="le-btn-icon" style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }} onClick={() => setZoom(prev => Math.max(60, prev - 15))} title="Zoom Out">-</button>
+              <select className="le-zoom-select" style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer' }} value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))}>
+                <option value="60">60%</option>
+                <option value="75">75%</option>
+                <option value="100">100%</option>
+                <option value="125">125%</option>
+                <option value="150">150%</option>
+                <option value="200">200%</option>
+              </select>
+              <button className="le-btn-icon" style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }} onClick={() => setZoom(prev => Math.min(200, prev + 15))} title="Zoom In">+</button>
+            </div>
+          )}
+
+          {pdfPreviewUrl ? (
+            <div style={{ width: '100%', height: '100%', overflowY: 'auto', backgroundColor: '#525659', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+              <Document
+                file={pdfPreviewUrl}
+                loading={<div style={{ color: 'white', marginTop: '2rem' }}>Loading PDF Engine...</div>}
+                error={<div style={{ color: 'var(--error)', marginTop: '2rem' }}>Failed to load PDF preview.</div>}
+              >
+                {Array.from(new Array(compiledPageCount || 1), (el, index) => (
+                  <div
+                    key={`page_${index + 1}`}
+                    id={`pdf-page-${index + 1}`}
+                    style={{
+                      marginBottom: '20px',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                      cursor: 'pointer'
                     }}
-                  />
-                ))
+                  >
+                    <Page
+                      pageNumber={index + 1}
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                      onClick={(e) => handlePdfClick(e, index + 1)}
+                      onLoadSuccess={(page) => {
+                        const viewport = page.getViewport({ scale: 1 });
+                        const pageEl = document.getElementById(`pdf-page-${index + 1}`);
+                        if (pageEl) {
+                          pageEl.dataset.originalWidth = viewport.width;
+                        }
+                      }}
+                      width={(pdfViewerPaneRef.current ? pdfViewerPaneRef.current.clientWidth - 60 : 600) * (zoom / 100)}
+                    />
+                  </div>
+                ))}
+              </Document>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', flex: 1, color: 'var(--text-muted)' }}>
+              {isBackendCompiling ? (
+                <><span className="btn-spinner" style={{ borderTopColor: 'var(--accent-light)', width: '32px', height: '32px', marginBottom: '1rem', borderWidth: '3px' }}></span> Compiling pixel-perfect PDF...</>
+              ) : compileStatus === 'Error' ? (
+                <><FailedIcon size={48} style={{ color: 'var(--error)' }} /> <div style={{ marginTop: '1rem', color: 'var(--error)' }}>Compilation failed. Please check diagnostics below.</div></>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: 'var(--text-muted)' }}>
-                  {isBackendCompiling ? (
-                    <><span className="btn-spinner" style={{ borderTopColor: 'var(--accent-light)', width: '32px', height: '32px', marginBottom: '1rem', borderWidth: '3px' }}></span> Compiling pixel-perfect PDF...</>
-                  ) : compileStatus === 'Error' ? (
-                    <><FailedIcon size={48} style={{ color: 'var(--error)' }} /> <div style={{ marginTop: '1rem', color: 'var(--error)' }}>Compilation failed. Please check diagnostics below.</div></>
-                  ) : (
-                    <><PdfIcon size={48} /> <div style={{ marginTop: '1rem' }}>Generating preview...</div></>
-                  )}
-                </div>
+                <><PdfIcon size={48} /> <div style={{ marginTop: '1rem' }}>Generating preview...</div></>
               )}
             </div>
-          </div>
-          
-          {isBackendCompiling && compiledPageCount > 0 && (
-             <div style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 100 }}>
-                <span className="btn-spinner" style={{ width: '14px', height: '14px' }}></span> Compiling...
-             </div>
+          )}
+
+          {isBackendCompiling && pdfPreviewUrl && (
+            <div style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 100 }}>
+              <span className="btn-spinner" style={{ width: '14px', height: '14px' }}></span> Compiling...
+            </div>
           )}
         </div>
 
@@ -2556,7 +2477,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
             </span>
             {compileTime && <span style={{ marginLeft: '4px' }}>at {compileTime}</span>}
           </div>
-          
+
           {errors.length > 0 && (
             <div className="status-item">
               <span className="status-badge-error" onClick={() => setIsConsoleCollapsed(!isConsoleCollapsed)}>
@@ -2566,11 +2487,11 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
           )}
 
           <div className="status-item">
-            <span style={{ 
-              opacity: savedIndicatorVisible ? 1 : 0, 
-              transition: 'opacity 0.5s ease', 
-              color: 'var(--success)', 
-              fontWeight: 500 
+            <span style={{
+              opacity: savedIndicatorVisible ? 1 : 0,
+              transition: 'opacity 0.5s ease',
+              color: 'var(--success)',
+              fontWeight: 500
             }}>Saved</span>
             {lastSavedAt && (
               <span style={{ marginLeft: '6px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
@@ -2593,10 +2514,10 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
       {/* Snippet command palette modal dialog (Ctrl+K) */}
       <div className={`palette-overlay ${isPaletteOpen ? 'active' : ''}`} onClick={(e) => e.target.classList.contains('palette-overlay') && setIsPaletteOpen(false)}>
         <div className="palette-box">
-          <input 
-            type="text" 
-            className="palette-search" 
-            placeholder="Search LaTeX snippets..." 
+          <input
+            type="text"
+            className="palette-search"
+            placeholder="Search LaTeX snippets..."
             value={paletteSearch}
             onChange={(e) => { setPaletteSearch(e.target.value); setPaletteSelectedIndex(0); }}
             onKeyDown={handlePaletteKeyDown}
@@ -2607,7 +2528,7 @@ export default function LaTeXEditor({ code, onCodeChange, jobId, onReset, saveTo
               <div style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>No matches found</div>
             ) : (
               filteredSnippets.map((item, idx) => (
-                <div 
+                <div
                   key={idx}
                   className={`palette-item ${paletteSelectedIndex === idx ? 'selected' : ''}`}
                   onClick={() => insertSnippet(item)}

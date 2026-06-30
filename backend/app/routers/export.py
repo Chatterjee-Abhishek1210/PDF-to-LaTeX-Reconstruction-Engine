@@ -295,6 +295,7 @@ async def compile_and_download_pdf(job_id: str, request: Request):
             process = subprocess.run(
                 [
                     compiler,
+                    "-synctex=1",
                     "-interaction=nonstopmode",
                     "-shell-escape",
                     "-output-directory", compile_dir,
@@ -362,6 +363,7 @@ async def compile_and_download_docx(job_id: str, request: Request):
                     subprocess.run(
                         [
                             compiler,
+                            "-synctex=1",
                             "-interaction=nonstopmode",
                             "-shell-escape",
                             "-output-directory", compile_dir,
@@ -398,3 +400,48 @@ async def compile_and_download_docx(job_id: str, request: Request):
     except Exception as e:
         logger.error(f"Compile-DOCX failed for job {job_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"DOCX conversion failed: {str(e)}")
+
+
+@router.get("/export/synctex/{job_id}")
+async def get_synctex_line(job_id: str, page: int, x: float, y: float):
+    """
+    Inverse SyncTeX: Maps PDF click coordinates to source code line.
+    """
+    compile_dir = os.path.join(str(OUTPUT_DIR), job_id, "compile_workspace")
+    pdf_path = os.path.join(compile_dir, "document.pdf")
+    
+    if not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="Compiled PDF not found")
+        
+    synctex_path = os.path.join(compile_dir, "document.synctex.gz")
+    if not os.path.exists(synctex_path):
+        synctex_path = os.path.join(compile_dir, "document.synctex")
+        if not os.path.exists(synctex_path):
+            raise HTTPException(status_code=404, detail="SyncTeX data not found")
+
+    synctex_bin = shutil.which("synctex")
+    if not synctex_bin:
+        raise HTTPException(status_code=500, detail="synctex CLI tool not found on server")
+
+    try:
+        coord_str = f"{page}:{x}:{y}:{pdf_path}"
+        process = subprocess.run(
+            [synctex_bin, "edit", "-o", coord_str],
+            capture_output=True,
+            text=True,
+            cwd=compile_dir
+        )
+        
+        output = process.stdout
+        for line in output.split('\n'):
+            if line.startswith('Line:'):
+                try:
+                    line_num = int(line.split(':')[1].strip())
+                    return {"line": line_num}
+                except ValueError:
+                    pass
+                    
+        return {"line": 1}
+    except Exception as e:
+        logger.error(f"SyncTeX edit failed: {e}")
+        raise HTTPException(status_code=500, detail="SyncTeX processing failed")
